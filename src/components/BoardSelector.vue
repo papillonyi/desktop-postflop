@@ -3,9 +3,9 @@
     <BoardSelectorCard
       v-for="rank in 13"
       :key="rank"
-      class="m-1"
       :card-id="56 - 4 * rank - suit"
       :is-selected="config.board.includes(56 - 4 * rank - suit)"
+      class="m-1"
       @click="toggleCard(56 - 4 * rank - suit)"
     />
   </div>
@@ -13,10 +13,10 @@
   <div class="flex mt-4 mx-1 gap-3">
     <input
       v-model="boardText"
-      type="text"
       class="w-40 px-2 py-1 rounded-lg text-sm"
-      @focus="($event.target as HTMLInputElement).select()"
+      type="text"
       @change="onBoardTextChange"
+      @focus="($event.target as HTMLInputElement).select()"
     />
     <button class="button-base button-blue" @click="clearBoard">Clear</button>
     <button class="button-base button-blue" @click="generateRandomBoard">
@@ -37,7 +37,7 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
 import { ref } from "vue";
 import { useConfigStore } from "../store";
 import { cardText, parseCardString } from "../utils";

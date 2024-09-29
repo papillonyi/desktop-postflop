@@ -165,8 +165,8 @@
                   spot.index === selectedSpotIndex &&
                   !(selectedChanceIndex !== -1 && !canChanceReports)
                 "
-                class="absolute top-[0.3125rem] left-0 w-3 h-3 rounded-sm"
                 :style="{ backgroundColor: action.color }"
+                class="absolute top-[0.3125rem] left-0 w-3 h-3 rounded-sm"
               ></span>
               <span v-if="action.isSelected">
                 <CheckIcon class="absolute top-[0.1875rem] -left-0.5 w-4 h-4" />
@@ -239,28 +239,28 @@
   </div>
 </template>
 
-<script setup lang="ts">
-import { computed, nextTick, toRefs, ref, watch } from "vue";
+<script lang="ts" setup>
+import { computed, nextTick, ref, toRefs, watch } from "vue";
 import { useSavedConfigStore } from "../store";
-import { cardText, average, colorString } from "../utils";
+import { average, cardText, colorString } from "../utils";
 import * as invokes from "../invokes";
 
 import {
-  Results,
   ChanceReports,
+  Results,
   Spot,
-  SpotRoot,
   SpotChance,
   SpotPlayer,
+  SpotRoot,
 } from "../result-types";
 
 import {
   CheckIcon,
-  XMarkIcon,
   ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ChevronUpIcon,
+  XMarkIcon,
 } from "@heroicons/vue/20/solid";
 
 const foldColor = { red: 0x3b, green: 0x82, blue: 0xf6 }; // blue-500

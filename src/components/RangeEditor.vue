@@ -8,8 +8,8 @@
             :key="col"
             class="relative w-[2.625rem] border border-black"
             @mousedown="dragStart(row, col)"
-            @mouseup="dragEnd"
             @mouseenter="mouseEnter(row, col)"
+            @mouseup="dragEnd"
           >
             <div
               :class="
@@ -18,11 +18,11 @@
               "
             >
               <div
-                class="absolute w-full h-full left-0 top-0 bg-bottom bg-no-repeat"
                 :style="{
                   'background-image': `linear-gradient(${yellow500} 0% 100%)`,
                   'background-size': `100% ${cellValue(row, col)}%`,
                 }"
+                class="absolute w-full h-full left-0 top-0 bg-bottom bg-no-repeat"
               ></div>
             </div>
             <div
@@ -50,13 +50,13 @@
         <div class="flex">
           <input
             v-model="rangeText"
-            type="text"
             :class="
               'flex-grow mr-6 px-2 py-1 rounded-lg text-sm ' +
               (rangeTextError ? 'input-error' : '')
             "
-            @focus="($event.target as HTMLInputElement).select()"
+            type="text"
             @change="onRangeTextChange"
+            @focus="($event.target as HTMLInputElement).select()"
           />
 
           <button
@@ -82,23 +82,23 @@
           Weight:
           <input
             v-model="weight"
-            type="range"
             class="ml-3 w-40 align-middle"
-            min="0"
             max="100"
+            min="0"
             step="5"
+            type="range"
             @change="onWeightChange"
           />
           <input
             v-model="weight"
-            type="number"
             :class="
               'w-20 ml-4 px-2 py-1 rounded-lg text-sm text-center ' +
               (weight < 0 || weight > 100 ? 'input-error' : '')
             "
-            min="0"
             max="100"
+            min="0"
             step="5"
+            type="number"
             @change="onWeightChange"
           />
           %
@@ -114,11 +114,11 @@
 
     <div class="flex-grow max-w-[18rem] ml-6">
       <DbItemPicker
-        store-name="ranges"
-        :index="player"
-        :value="rangeText"
         :allow-save="rangeText !== '' && rangeTextError === ''"
         :hide-import-export="player >= 2"
+        :index="player"
+        :value="rangeText"
+        store-name="ranges"
         @load-item="loadRange"
       />
 
@@ -134,10 +134,10 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
 import { ref } from "vue";
 import { useStore } from "../store";
-import { ranks, trimRegex, rangeRegex } from "../utils";
+import { rangeRegex, ranks, trimRegex } from "../utils";
 import * as invokes from "../invokes";
 
 import DbItemPicker from "./DbItemPicker.vue";

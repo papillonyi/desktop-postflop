@@ -16,21 +16,21 @@
     <div class="flex mt-4 gap-8 items-center">
       <label class="cursor-pointer">
         <input
-          type="checkbox"
           v-model="store.isBunchingEnabled"
           class="mr-1 align-middle rounded"
+          type="checkbox"
         />
         Enable bunching effect
       </label>
 
       <div class="flex">
         <Tippy
-          class="inline-block cursor-help text-gray-600"
-          max-width="500px"
-          trigger="mouseenter click"
-          placement="bottom"
           :delay="[200, 0]"
           :interactive="true"
+          class="inline-block cursor-help text-gray-600"
+          max-width="500px"
+          placement="bottom"
+          trigger="mouseenter click"
         >
           <QuestionMarkCircleIcon class="inline w-5 h-5" />
           <div class="inline-block ml-0.5 text-sm underline">
@@ -67,19 +67,19 @@
         <div v-for="i in 4" :key="i">
           <div class="text-[1.0625rem]">Fold Range {{ i }}</div>
           <RangeMiniViewer
-            class="w-44 h-44 mt-2 cursor-pointer"
             :player="i + 1"
+            class="w-44 h-44 mt-2 cursor-pointer"
             @click="editRange(i - 1)"
           />
           <input
             v-model="rangeTexts[i - 1]"
-            type="text"
             :class="
               'w-44 mt-3 px-2 py-1 rounded-lg text-sm ' +
               (isRangeTextError[i - 1] ? ' input-error' : '')
             "
-            @focus="($event.target as HTMLInputElement).select()"
+            type="text"
             @change="onRangeTextChange(i - 1)"
+            @focus="($event.target as HTMLInputElement).select()"
           />
           <div class="mt-2 text-center">
             {{ numCombos[i - 1].toFixed(1) }} combos ({{
@@ -101,7 +101,6 @@
 
       <div class="flex mt-8 gap-3 items-center">
         <button
-          class="button-base button-blue"
           :disabled="
             numCombos.every((x) => x === 0) ||
             store.isBunchingRunning ||
@@ -110,34 +109,35 @@
             numThreads > 64 ||
             numThreads % 1 !== 0
           "
+          class="button-base button-blue"
           @click="runPrecomputation"
         >
           Run Precomputation
         </button>
         <button
-          class="button-base button-red"
           :disabled="!hasBunchingRun"
+          class="button-base button-red"
           @click="clearPrecomputation"
         >
           Clear
         </button>
         <button
           v-if="!isBunchingPaused"
-          class="button-base button-green"
           :disabled="!store.isBunchingRunning"
+          class="button-base button-green"
           @click="() => (pauseFlag = true)"
         >
           Pause
         </button>
         <button
           v-else
-          class="button-base button-green"
           :disabled="
             store.isSolverRunning ||
             numThreads < 1 ||
             numThreads > 64 ||
             numThreads % 1 !== 0
           "
+          class="button-base button-green"
           @click="resumePrecomputation"
         >
           Resume
@@ -147,15 +147,15 @@
           Number of threads:
           <input
             v-model="numThreads"
-            type="number"
             :class="
               'w-20 ml-1.5 px-2 py-1 rounded-lg text-sm text-center ' +
               (numThreads < 1 || numThreads > 64 || numThreads % 1 !== 0
                 ? 'input-error'
                 : '')
             "
-            min="1"
             max="64"
+            min="1"
+            type="number"
           />
         </span>
         <span class="pl-3">
@@ -192,17 +192,17 @@
 
   <RangeEditor
     v-else
-    :player="editingPlayer + 2"
     :default-text="rangeTextCopy"
-    @save="saveEdit"
+    :player="editingPlayer + 2"
     @cancel="cancelEdit"
+    @save="saveEdit"
   />
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
 import { ref } from "vue";
-import { useStore, useConfigStore } from "../store";
-import { trimRegex, rangeRegex, cardText } from "../utils";
+import { useConfigStore, useStore } from "../store";
+import { cardText, rangeRegex, trimRegex } from "../utils";
 import * as invokes from "../invokes";
 
 import RangeEditor from "./RangeEditor.vue";

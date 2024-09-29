@@ -8,7 +8,6 @@
               <span class="inline-block w-[7.5rem]">Starting pot:</span>
               <input
                 v-model="config.startingPot"
-                type="number"
                 :class="
                   'w-24 px-2 py-1 rounded-lg text-sm text-center ' +
                   (config.startingPot <= 0 ||
@@ -18,8 +17,9 @@
                     : '')
                 "
                 :disabled="hasEdit"
-                min="0"
                 :max="MAX_AMOUNT"
+                min="0"
+                type="number"
               />
             </div>
 
@@ -27,7 +27,6 @@
               <span class="inline-block w-[7.5rem]">Effective stack:</span>
               <input
                 v-model="config.effectiveStack"
-                type="number"
                 :class="
                   'w-24 px-2 py-1 rounded-lg text-sm text-center ' +
                   (config.effectiveStack <= 0 ||
@@ -37,8 +36,9 @@
                     : '')
                 "
                 :disabled="hasEdit"
-                min="0"
                 :max="MAX_AMOUNT"
+                min="0"
+                type="number"
               />
             </div>
           </div>
@@ -48,7 +48,6 @@
               <span class="inline-block w-20">Rake:</span>
               <input
                 v-model="config.rakePercent"
-                type="number"
                 :class="
                   'w-24 px-2 py-1 rounded-lg text-sm text-center ' +
                   (config.rakePercent < 0 || config.rakePercent > 100
@@ -56,9 +55,10 @@
                     : '')
                 "
                 :disabled="hasEdit"
-                min="0"
                 max="100"
+                min="0"
                 step="0.5"
+                type="number"
               />
               %
             </div>
@@ -67,7 +67,6 @@
               <span class="inline-block w-20">Rake cap:</span>
               <input
                 v-model="config.rakeCap"
-                type="number"
                 :class="
                   'w-24 px-2 py-1 rounded-lg text-sm text-center ' +
                   (config.rakeCap < 0 || config.rakeCap > 3 * MAX_AMOUNT
@@ -75,8 +74,9 @@
                     : '')
                 "
                 :disabled="hasEdit"
-                min="0"
                 :max="3 * MAX_AMOUNT"
+                min="0"
+                type="number"
               />
             </div>
           </div>
@@ -106,9 +106,9 @@
             <label class="inline-block ml-6">
               <input
                 v-model="config.donkOption"
-                type="checkbox"
-                class="mr-1 align-middle rounded cursor-pointer peer"
                 :disabled="hasEdit"
+                class="mr-1 align-middle rounded cursor-pointer peer"
+                type="checkbox"
               />
               <span class="cursor-pointer peer-disabled:cursor-not-allowed">
                 Use different sizes for donk bets
@@ -116,12 +116,12 @@
             </label>
             <div class="flex flex-grow justify-center">
               <Tippy
-                class="inline-block cursor-help text-gray-600"
-                max-width="500px"
-                trigger="mouseenter click"
-                placement="bottom"
                 :delay="[200, 0]"
                 :interactive="true"
+                class="inline-block cursor-help text-gray-600"
+                max-width="500px"
+                placement="bottom"
+                trigger="mouseenter click"
               >
                 <QuestionMarkCircleIcon class="inline w-5 h-5" />
                 <div class="inline-block ml-0.5 text-sm underline">
@@ -178,12 +178,12 @@
                 <span class="inline-block w-14">Bet:</span>
                 <input
                   v-model="config.oopFlopBet"
-                  type="text"
                   :class="
                     'w-24 px-2 py-1 rounded-lg text-sm ' +
                     (!config.oopFlopBetSanitized.valid ? 'input-error' : '')
                   "
                   :disabled="hasEdit"
+                  type="text"
                   @change="
                     config.oopFlopBetSanitized.valid &&
                       (config.oopFlopBet = config.oopFlopBetSanitized.s)
@@ -195,12 +195,12 @@
                 <span class="inline-block w-14">Raise:</span>
                 <input
                   v-model="config.oopFlopRaise"
-                  type="text"
                   :class="
                     'w-24 px-2 py-1 rounded-lg text-sm ' +
                     (!config.oopFlopRaiseSanitized.valid ? 'input-error' : '')
                   "
                   :disabled="hasEdit"
+                  type="text"
                   @change="
                     config.oopFlopRaiseSanitized.valid &&
                       (config.oopFlopRaise = config.oopFlopRaiseSanitized.s)
@@ -216,12 +216,12 @@
                 <span class="inline-block w-14">Bet:</span>
                 <input
                   v-model="config.oopTurnBet"
-                  type="text"
                   :class="
                     'w-24 px-2 py-1 rounded-lg text-sm ' +
                     (!config.oopTurnBetSanitized.valid ? 'input-error' : '')
                   "
                   :disabled="hasEdit"
+                  type="text"
                   @change="
                     config.oopTurnBetSanitized.valid &&
                       (config.oopTurnBet = config.oopTurnBetSanitized.s)
@@ -233,12 +233,12 @@
                 <span class="inline-block w-14">Raise:</span>
                 <input
                   v-model="config.oopTurnRaise"
-                  type="text"
                   :class="
                     'w-24 px-2 py-1 rounded-lg text-sm ' +
                     (!config.oopTurnRaiseSanitized.valid ? 'input-error' : '')
                   "
                   :disabled="hasEdit"
+                  type="text"
                   @change="
                     config.oopTurnRaiseSanitized.valid &&
                       (config.oopTurnRaise = config.oopTurnRaiseSanitized.s)
@@ -250,12 +250,12 @@
                 <span class="inline-block w-14">Donk:</span>
                 <input
                   v-model="config.oopTurnDonk"
-                  type="text"
                   :class="
                     'w-24 px-2 py-1 rounded-lg text-sm ' +
                     (!config.oopTurnDonkSanitized.valid ? 'input-error' : '')
                   "
                   :disabled="hasEdit"
+                  type="text"
                   @change="
                     config.oopTurnDonkSanitized.valid &&
                       (config.oopTurnDonk = config.oopTurnDonkSanitized.s)
@@ -271,12 +271,12 @@
                 <span class="inline-block w-14">Bet:</span>
                 <input
                   v-model="config.oopRiverBet"
-                  type="text"
                   :class="
                     'w-24 px-2 py-1 rounded-lg text-sm ' +
                     (!config.oopRiverBetSanitized.valid ? 'input-error' : '')
                   "
                   :disabled="hasEdit"
+                  type="text"
                   @change="
                     config.oopRiverBetSanitized.valid &&
                       (config.oopRiverBet = config.oopRiverBetSanitized.s)
@@ -288,12 +288,12 @@
                 <span class="inline-block w-14">Raise:</span>
                 <input
                   v-model="config.oopRiverRaise"
-                  type="text"
                   :class="
                     'w-24 px-2 py-1 rounded-lg text-sm ' +
                     (!config.oopRiverRaiseSanitized.valid ? 'input-error' : '')
                   "
                   :disabled="hasEdit"
+                  type="text"
                   @change="
                     config.oopRiverRaiseSanitized.valid &&
                       (config.oopRiverRaise = config.oopRiverRaiseSanitized.s)
@@ -305,12 +305,12 @@
                 <span class="inline-block w-14">Donk:</span>
                 <input
                   v-model="config.oopRiverDonk"
-                  type="text"
                   :class="
                     'w-24 px-2 py-1 rounded-lg text-sm ' +
                     (!config.oopRiverDonkSanitized.valid ? 'input-error' : '')
                   "
                   :disabled="hasEdit"
+                  type="text"
                   @change="
                     config.oopRiverDonkSanitized.valid &&
                       (config.oopRiverDonk = config.oopRiverDonkSanitized.s)
@@ -327,15 +327,15 @@
             <div class="mt-6 font-semibold">IP bet sizes</div>
             <div class="flex flex-grow items-center justify-center gap-6">
               <button
-                class="mt-3 button-base button-blue button-arrow"
                 :disabled="errorIp.length > 0 || hasEdit"
+                class="mt-3 button-base button-blue button-arrow"
                 @click="ipToOop"
               >
                 ↑
               </button>
               <button
-                class="mt-3 button-base button-blue button-arrow"
                 :disabled="errorOop.length > 0 || hasEdit"
+                class="mt-3 button-base button-blue button-arrow"
                 @click="oopToIp"
               >
                 ↓
@@ -350,12 +350,12 @@
                 <span class="inline-block w-14">Bet:</span>
                 <input
                   v-model="config.ipFlopBet"
-                  type="text"
                   :class="
                     'w-24 px-2 py-1 rounded-lg text-sm ' +
                     (!config.ipFlopBetSanitized.valid ? 'input-error' : '')
                   "
                   :disabled="hasEdit"
+                  type="text"
                   @change="
                     config.ipFlopBetSanitized.valid &&
                       (config.ipFlopBet = config.ipFlopBetSanitized.s)
@@ -367,12 +367,12 @@
                 <span class="inline-block w-14">Raise:</span>
                 <input
                   v-model="config.ipFlopRaise"
-                  type="text"
                   :class="
                     'w-24 px-2 py-1 rounded-lg text-sm ' +
                     (!config.ipFlopRaiseSanitized.valid ? 'input-error' : '')
                   "
                   :disabled="hasEdit"
+                  type="text"
                   @change="
                     config.ipFlopRaiseSanitized.valid &&
                       (config.ipFlopRaise = config.ipFlopRaiseSanitized.s)
@@ -388,12 +388,12 @@
                 <span class="inline-block w-14">Bet:</span>
                 <input
                   v-model="config.ipTurnBet"
-                  type="text"
                   :class="
                     'w-24 px-2 py-1 rounded-lg text-sm ' +
                     (!config.ipTurnBetSanitized.valid ? 'input-error' : '')
                   "
                   :disabled="hasEdit"
+                  type="text"
                   @change="
                     config.ipTurnBetSanitized.valid &&
                       (config.ipTurnBet = config.ipTurnBetSanitized.s)
@@ -405,12 +405,12 @@
                 <span class="inline-block w-14">Raise:</span>
                 <input
                   v-model="config.ipTurnRaise"
-                  type="text"
                   :class="
                     'w-24 px-2 py-1 rounded-lg text-sm ' +
                     (!config.ipTurnRaiseSanitized.valid ? 'input-error' : '')
                   "
                   :disabled="hasEdit"
+                  type="text"
                   @change="
                     config.ipTurnRaiseSanitized.valid &&
                       (config.ipTurnRaise = config.ipTurnRaiseSanitized.s)
@@ -426,12 +426,12 @@
                 <span class="inline-block w-14">Bet:</span>
                 <input
                   v-model="config.ipRiverBet"
-                  type="text"
                   :class="
                     'w-24 px-2 py-1 rounded-lg text-sm ' +
                     (!config.ipRiverBetSanitized.valid ? 'input-error' : '')
                   "
                   :disabled="hasEdit"
+                  type="text"
                   @change="
                     config.ipRiverBetSanitized.valid &&
                       (config.ipRiverBet = config.ipRiverBetSanitized.s)
@@ -443,12 +443,12 @@
                 <span class="inline-block w-14">Raise:</span>
                 <input
                   v-model="config.ipRiverRaise"
-                  type="text"
                   :class="
                     'w-24 px-2 py-1 rounded-lg text-sm ' +
                     (!config.ipRiverRaiseSanitized.valid ? 'input-error' : '')
                   "
                   :disabled="hasEdit"
+                  type="text"
                   @change="
                     config.ipRiverRaiseSanitized.valid &&
                       (config.ipRiverRaise = config.ipRiverRaiseSanitized.s)
@@ -481,11 +481,11 @@
               <div class="inline-block w-48">
                 Add all-in threshold:
                 <Tippy
+                  :delay="[200, 0]"
+                  :interactive="true"
                   class="inline-block cursor-help"
                   max-width="420px"
                   trigger="mouseenter click"
-                  :delay="[200, 0]"
-                  :interactive="true"
                 >
                   <QuestionMarkCircleIcon class="w-5 h-5 text-gray-600" />
                   <template #content>
@@ -499,14 +499,14 @@
               </div>
               <input
                 v-model="config.addAllInThreshold"
-                type="number"
                 :class="
                   'w-24 px-2 py-1 rounded-lg text-sm text-center ' +
                   (config.addAllInThreshold < 0 ? 'input-error' : '')
                 "
                 :disabled="hasEdit"
-                min="0"
                 :max="MAX_AMOUNT * 100"
+                min="0"
+                type="number"
               />
               %
             </div>
@@ -515,11 +515,11 @@
               <div class="inline-block w-48">
                 Force all-in threshold:
                 <Tippy
+                  :delay="[200, 0]"
+                  :interactive="true"
                   class="inline-block cursor-help"
                   max-width="500px"
                   trigger="mouseenter click"
-                  :delay="[200, 0]"
-                  :interactive="true"
                 >
                   <QuestionMarkCircleIcon class="w-5 h-5 text-gray-600" />
                   <template #content>
@@ -550,14 +550,14 @@
               </div>
               <input
                 v-model="config.forceAllInThreshold"
-                type="number"
                 :class="
                   'w-24 px-2 py-1 rounded-lg text-sm text-center ' +
                   (config.forceAllInThreshold < 0 ? 'input-error' : '')
                 "
                 :disabled="hasEdit"
-                min="0"
                 :max="MAX_AMOUNT * 100"
+                min="0"
+                type="number"
               />
               %
             </div>
@@ -566,11 +566,11 @@
               <div class="inline-block w-48">
                 Merging threshold:
                 <Tippy
+                  :delay="[200, 0]"
+                  :interactive="true"
                   class="inline-block cursor-help"
                   max-width="500px"
                   trigger="mouseenter click"
-                  :delay="[200, 0]"
-                  :interactive="true"
                 >
                   <QuestionMarkCircleIcon class="w-5 h-5 text-gray-600" />
                   <template #content>
@@ -598,14 +598,14 @@
               </div>
               <input
                 v-model="config.mergingThreshold"
-                type="number"
                 :class="
                   'w-24 px-2 py-1 rounded-lg text-sm text-center ' +
                   (config.mergingThreshold < 0 ? 'input-error' : '')
                 "
                 :disabled="hasEdit"
-                min="0"
                 :max="MAX_AMOUNT * 100"
+                min="0"
+                type="number"
               />
               %
             </div>
@@ -614,8 +614,8 @@
           <div class="flex justify-center flex-grow">
             <div class="flex flex-col justify-center gap-3">
               <button
-                class="button-base button-blue"
                 :disabled="!isInputValid"
+                class="button-base button-blue"
                 @click="startEdit"
               >
                 Preview & Edit Tree
@@ -663,9 +663,9 @@
 
       <div class="flex-grow max-w-[18rem] mt-1 ml-6">
         <DbItemPicker
-          store-name="configurations"
-          :value="dbValue"
           :allow-save="isInputValid"
+          :value="dbValue"
+          store-name="configurations"
           @load-item="loadConfig"
         />
       </div>
@@ -731,7 +731,7 @@
   <div v-else>
     <Suspense>
       <template #default>
-        <TreeEditor @save="saveEdit" @cancel="cancelEdit" />
+        <TreeEditor @cancel="cancelEdit" @save="saveEdit" />
       </template>
       <template #fallback>
         <div>Loading...</div>
@@ -740,15 +740,15 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
 import { computed, ref } from "vue";
-import { useStore, useConfigStore } from "../store";
+import { useConfigStore, useStore } from "../store";
 import {
-  MAX_AMOUNT,
-  sanitizeBetString,
-  ROOT_LINE_STRING,
   INVALID_LINE_STRING,
+  MAX_AMOUNT,
   readableLineString,
+  ROOT_LINE_STRING,
+  sanitizeBetString,
 } from "../utils";
 
 import DbItemPicker from "./DbItemPicker.vue";

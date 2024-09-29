@@ -13,12 +13,12 @@
         <BoardSelectorCard
           v-for="rank in 13"
           :key="rank"
-          class="disabled:opacity-75 disabled:brightness-75"
-          font-size="max(1.2vw, 13px)"
-          width="5.5%"
           :card-id="56 - 4 * rank - suit"
           :disabled="selectedChance.cards[56 - 4 * rank - suit].isDead"
           :is-selected="selectedChance.selectedIndex === 56 - 4 * rank - suit"
+          class="disabled:opacity-75 disabled:brightness-75"
+          font-size="max(1.2vw, 13px)"
+          width="5.5%"
           @click="deal(56 - 4 * rank - suit)"
         />
         <div></div>
@@ -39,34 +39,34 @@
     </div>
 
     <ResultTable
+      :chance-reports="chanceReports"
+      :chance-type="selectedChance.player"
+      :display-player="displayPlayer"
+      :selected-spot="selectedSpot"
       style="flex: 3"
       table-mode="chance"
-      :chance-type="selectedChance.player"
-      :selected-spot="selectedSpot"
-      :chance-reports="chanceReports"
-      :display-player="displayPlayer"
     />
   </div>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
 import { computed, ref, watch } from "vue";
-import { ranks, suits, cardId, toFixed1, toFixedAdaptive } from "../utils";
+import { cardId, ranks, suits, toFixed1, toFixedAdaptive } from "../utils";
 import {
   ChanceReports,
+  DisplayOptions,
   Spot,
   SpotChance,
   SpotPlayer,
-  DisplayOptions,
 } from "../result-types";
 
 import {
-  Chart,
-  ChartData,
-  ChartOptions,
   BarController,
   BarElement,
   CategoryScale,
+  Chart,
+  ChartData,
+  ChartOptions,
   LinearScale,
   Title,
   Tooltip,

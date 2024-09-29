@@ -1,7 +1,6 @@
 <template>
   <div class="w-full h-full">
     <table
-      class="w-full h-full table-fixed select-none snug"
       :style="{
         '--font-scale': isCompareMode ? 0.875 : 1,
         '--pair-font-size':
@@ -9,6 +8,7 @@
         '--value-font-size':
           'calc(max(0.889rem, min(1.2vw, 2vh)) * var(--font-scale))',
       }"
+      class="w-full h-full table-fixed select-none snug"
       @mouseleave="onMouseLeaveTable"
     >
       <tr v-for="row in 13" :key="row">
@@ -31,11 +31,11 @@
             <div
               v-for="(column, k) in columns(row, col)"
               :key="k"
-              class="flex-grow h-full bg-left-bottom bg-no-repeat"
               :style="{
                 'background-image': column?.bgImage ?? 'none',
                 'background-size': column?.bgSize ?? 'auto',
               }"
+              class="flex-grow h-full bg-left-bottom bg-no-repeat"
             ></div>
           </div>
           <div
@@ -48,12 +48,12 @@
             {{ cellText(row, col) }}
           </div>
           <div
+            :data-set="(strTmp = cellValueText[cellIndex(row, col)])"
             class="absolute bottom-px right-1 z-10 text-shadow text-white overflow-hidden"
             style="
               max-width: calc(100% - 0.25rem);
               font-size: var(--value-font-size);
             "
-            :data-set="(strTmp = cellValueText[cellIndex(row, col)])"
           >
             {{ strTmp.split(".")[0]
             }}<span v-if="strTmp.includes('.')"
@@ -68,24 +68,24 @@
   </div>
 </template>
 
-<script setup lang="ts">
-import { computed, ref, toRefs, onUnmounted, watch } from "vue";
+<script lang="ts" setup>
+import { computed, onUnmounted, ref, toRefs, watch } from "vue";
 import { useSavedConfigStore } from "../store";
 import {
-  ranks,
   cardPairCellIndex,
-  toFixed1,
-  toFixed,
   colorString,
+  ranks,
+  toFixed,
+  toFixed1,
 } from "../utils";
 
 import {
+  DisplayOptions,
+  HoverContent,
   Results,
   Spot,
   SpotChance,
   SpotPlayer,
-  DisplayOptions,
-  HoverContent,
 } from "../result-types";
 
 const yellow500 = "#eab308";

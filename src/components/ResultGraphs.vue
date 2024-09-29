@@ -4,10 +4,10 @@
       <div class="w-full px-4 pt-4 pb-2" style="flex: 7">
         <div class="relative h-full">
           <LineChart
-            class="absolute left-0 top-0 w-full h-full"
             :data="chartData"
             :options="chartOptions"
             :plugins="[verticalLinePlugin]"
+            class="absolute left-0 top-0 w-full h-full"
             @mouseleave="tableScrollTarget = null"
           />
         </div>
@@ -16,15 +16,15 @@
       <div class="relative mx-4 mt-6 mb-8" style="flex: 2">
         <div
           v-if="displayPlayer === ['', 'oop', 'ip'][playerIndex + 1]"
-          class="absolute flex left-[3.25rem] top-0 h-full"
           :style="{ width: `${chartWidth}px` }"
+          class="absolute flex left-[3.25rem] top-0 h-full"
           @mouseleave="tableScrollTarget = null"
         >
           <div
             v-for="(item, i) in strategyItems"
             :key="i"
-            class="hover:brightness-75"
             :style="{ flex: item.weight, 'background-image': item.bgImage }"
+            class="hover:brightness-75"
             @mouseover="tableScrollTarget = item.cards"
           ></div>
         </div>
@@ -36,42 +36,42 @@
     </div>
 
     <ResultTable
+      :cards="cards"
+      :display-player="displayPlayer"
+      :graph-type="displayOptions.contentGraphs"
+      :results="results"
+      :scroll-target="tableScrollTarget"
+      :selected-spot="selectedSpot"
       style="flex: 3"
       table-mode="graphs"
-      :graph-type="displayOptions.contentGraphs"
-      :cards="cards"
-      :selected-spot="selectedSpot"
-      :results="results"
-      :display-player="displayPlayer"
-      :scroll-target="tableScrollTarget"
     />
   </div>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
 import { computed, ref } from "vue";
-import { cardText, cardPairOrder, toFixed1, toFixedAdaptive } from "../utils";
+import { cardPairOrder, cardText, toFixed1, toFixedAdaptive } from "../utils";
 import {
+  DisplayOptions,
   Results,
   Spot,
   SpotChance,
   SpotPlayer,
-  DisplayOptions,
 } from "../result-types";
 
 import {
   Chart,
   ChartData,
   ChartOptions,
+  Legend,
+  LinearScale,
   LineController,
   LineElement,
-  PointElement,
-  LinearScale,
-  Title,
-  Legend,
-  Tooltip,
-  Point,
   Plugin,
+  Point,
+  PointElement,
+  Title,
+  Tooltip,
 } from "chart.js";
 
 import { Line as LineChart } from "vue-chartjs";

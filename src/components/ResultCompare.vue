@@ -21,20 +21,20 @@
     <div class="flex flex-col gap-0.5">
       <div class="flex">
         <Adaptive
-          :value="combos[0]"
           :class="{
             'w-14': true,
             'font-semibold': combos[0] && combos[0] >= (1 - EPS) * combos[1],
           }"
+          :value="combos[0]"
         />
         <div class="flex-grow text-center underline">Combos</div>
         <Adaptive
-          :value="combos[1]"
           :class="{
             'w-14': true,
             'text-right': true,
             'font-semibold': combos[1] && (1 - EPS) * combos[0] <= combos[1],
           }"
+          :value="combos[1]"
         />
       </div>
       <BarChart :values="combos" />
@@ -43,22 +43,22 @@
     <div class="flex flex-col gap-0.5">
       <div class="flex">
         <Percentage
-          :value="equity[0]"
           :class="{
             'w-14': true,
             'font-semibold':
               !isNaN(equity[0]) && equity[0] >= (1 - EPS) * equity[1],
           }"
+          :value="equity[0]"
         />
         <div class="flex-grow text-center underline">Equity</div>
         <Percentage
-          :value="equity[1]"
           :class="{
             'w-14': true,
             'text-right': true,
             'font-semibold':
               !isNaN(equity[1]) && (1 - EPS) * equity[0] <= equity[1],
           }"
+          :value="equity[1]"
         />
       </div>
       <BarChart :values="equity" />
@@ -67,22 +67,22 @@
     <div class="flex flex-col gap-0.5">
       <div class="flex">
         <Ev
-          :value="ev[0]"
-          :digits="evDigits"
           :class="{
             'w-14': true,
             'font-semibold': !isNaN(ev[0]) && ev[0] >= (1 - EPS) * ev[1],
           }"
+          :digits="evDigits"
+          :value="ev[0]"
         />
         <div class="flex-grow text-center underline">EV</div>
         <Ev
-          :value="ev[1]"
-          :digits="evDigits"
           :class="{
             'w-14': true,
             'text-right': true,
             'font-semibold': !isNaN(ev[1]) && (1 - EPS) * ev[0] <= ev[1],
           }"
+          :digits="evDigits"
+          :value="ev[1]"
         />
       </div>
       <BarChart :values="ev" />
@@ -91,20 +91,20 @@
     <div class="flex flex-col gap-0.5">
       <div class="flex">
         <Percentage
-          :value="eqr[0]"
           :class="{
             'w-14': true,
             'font-semibold': !isNaN(eqr[0]) && eqr[0] >= (1 - EPS) * eqr[1],
           }"
+          :value="eqr[0]"
         />
         <div class="flex-grow text-center underline">EQR</div>
         <Percentage
-          :value="eqr[1]"
           :class="{
             'w-14': true,
             'text-right': true,
             'font-semibold': !isNaN(eqr[1]) && (1 - EPS) * eqr[0] <= eqr[1],
           }"
+          :value="eqr[1]"
         />
       </div>
       <BarChart :values="eqr" />
@@ -112,9 +112,9 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
 import { computed, h } from "vue";
-import { average, toFixed1, toFixed, toFixedAdaptive } from "../utils";
+import { average, toFixed, toFixed1, toFixedAdaptive } from "../utils";
 import { Results, Spot, SpotChance } from "../result-types";
 
 import { StarIcon } from "@heroicons/vue/24/solid";

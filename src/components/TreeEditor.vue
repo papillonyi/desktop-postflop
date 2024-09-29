@@ -142,7 +142,6 @@
 
   <div v-if="!isTreeError" class="flex gap-3">
     <button
-      class="button-base button-blue"
       :disabled="
         isSelectedTerminal ||
         isAfterAllin ||
@@ -151,14 +150,15 @@
         betAmount % 1 !== 0 ||
         existingAmounts.includes(betAmount)
       "
+      class="button-base button-blue"
       @click="addBetAction"
     >
       Add Bet Action
     </button>
 
     <button
-      class="button-base button-red"
       :disabled="selectedSpotIndex === 1"
+      class="button-base button-red"
       @click="removeSelectedNode"
     >
       Remove Selected Node
@@ -168,15 +168,15 @@
       Bet amount:
       <input
         v-model="betAmount"
-        type="number"
         :class="
           'w-24 ml-2 px-2 py-1 rounded-lg text-sm text-center ' +
           (betAmount < minAmount || betAmount > maxAmount || betAmount % 1 !== 0
             ? 'input-error'
             : '')
         "
-        :min="minAmount"
         :max="maxAmount"
+        :min="minAmount"
+        type="number"
         @keydown.enter="addBetAction"
       />
       <span v-if="!isSelectedTerminal && !isAfterAllin" class="ml-2">
@@ -193,8 +193,8 @@
 
   <div class="flex my-6 gap-3">
     <button
-      class="button-base button-blue"
       :disabled="isTreeError || invalidLinesArray.length > 0"
+      class="button-base button-blue"
       @click="saveEdit"
     >
       Save Edit
@@ -251,11 +251,11 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
 import { computed, nextTick, ref } from "vue";
 import { useConfigStore } from "../store";
 import { convertBetString, readableLineString } from "../utils";
-import { Spot, SpotRoot, SpotChance, SpotPlayer } from "../result-types";
+import { Spot, SpotChance, SpotPlayer, SpotRoot } from "../result-types";
 import * as invokes from "../invokes";
 
 import { CheckIcon } from "@heroicons/vue/20/solid";

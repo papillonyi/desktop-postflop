@@ -12,13 +12,13 @@
 
       <div class="flex ml-auto h-full items-center z-10">
         <a
-          href="https://github.com/b-inary/desktop-postflop"
           class="flex px-4 h-full items-center font-semibold hover:bg-slate-700"
+          href="https://github.com/b-inary/desktop-postflop"
           target="_blank"
         >
           <img
-            src="../assets/GitHub-Mark-Light-32px.png"
             class="inline-block w-5 h-5 mr-2.5"
+            src="../assets/GitHub-Mark-Light-32px.png"
           />
           GitHub
         </a>
@@ -54,9 +54,9 @@
   </nav>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
 import { useStore } from "../store";
-import { ComputerDesktopIcon, ChartBarIcon } from "@heroicons/vue/24/solid";
+import { ChartBarIcon, ComputerDesktopIcon } from "@heroicons/vue/24/solid";
 
 const store = useStore();
 </script>

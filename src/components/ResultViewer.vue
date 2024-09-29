@@ -22,21 +22,21 @@
 
   <div v-else class="flex flex-col h-full">
     <ResultNav
-      :is-handler-updated="isHandlerUpdated"
-      :is-locked="isLocked"
       :cards="cards"
       :dealt-card="dealtCard"
+      :is-handler-updated="isHandlerUpdated"
+      :is-locked="isLocked"
       @update:is-handler-updated="(value) => (isHandlerUpdated = value)"
       @update:is-locked="(value) => (isLocked = value)"
       @trigger-update="onUpdateSpot"
     />
 
     <ResultMiddle
-      :display-mode="displayMode"
-      :chance-mode="chanceMode"
       :auto-player-basics="autoPlayerBasics"
       :auto-player-chance="autoPlayerChance"
+      :chance-mode="chanceMode"
       :copy-success="copySuccess"
+      :display-mode="displayMode"
       @update:display-mode="updateDisplayMode"
       @update:display-options="updateDisplayOptions"
       @copy-to-clipboard="copyRangeTextToClipboard"
@@ -49,84 +49,84 @@
     >
       <template v-if="displayMode === 'basics'">
         <ResultBasics
-          style="flex: 4"
           :cards="cards"
-          :selected-spot="selectedSpot"
-          :selected-chance="selectedChance"
           :current-board="currentBoard"
-          :total-bet-amount="totalBetAmount"
-          :results="results"
           :display-options="displayOptions"
           :display-player="displayPlayerBasics"
           :is-compare-mode="false"
+          :results="results"
+          :selected-chance="selectedChance"
+          :selected-spot="selectedSpot"
+          :total-bet-amount="totalBetAmount"
+          style="flex: 4"
           @update-hover-content="onUpdateHoverContent"
         />
 
         <ResultTable
-          style="flex: 3"
-          table-mode="basics"
           :cards="cards"
-          :selected-spot="selectedSpot"
-          :results="results"
           :display-player="displayPlayerBasics"
           :hover-content="basicsHoverContent"
+          :results="results"
+          :selected-spot="selectedSpot"
+          style="flex: 3"
+          table-mode="basics"
         />
       </template>
 
       <template v-else-if="displayMode === 'graphs'">
         <ResultGraphs
           :cards="cards"
-          :selected-spot="selectedSpot"
-          :selected-chance="selectedChance"
-          :results="results"
           :chance-reports="chanceReports"
           :display-options="displayOptions"
           :display-player="displayPlayerBasics"
+          :results="results"
+          :selected-chance="selectedChance"
+          :selected-spot="selectedSpot"
         />
       </template>
 
       <template v-else-if="displayMode === 'compare'">
         <ResultBasics
-          style="flex: 5"
           :cards="cards"
-          :selected-spot="selectedSpot"
-          :selected-chance="selectedChance"
           :current-board="currentBoard"
-          :total-bet-amount="totalBetAmount"
-          :results="results"
           :display-options="displayOptions"
-          display-player="oop"
           :is-compare-mode="true"
+          :results="results"
+          :selected-chance="selectedChance"
+          :selected-spot="selectedSpot"
+          :total-bet-amount="totalBetAmount"
+          display-player="oop"
+          style="flex: 5"
         />
 
         <ResultCompare
-          style="flex: 2"
-          :selected-spot="selectedSpot"
-          :selected-chance="selectedChance"
           :results="results"
+          :selected-chance="selectedChance"
+          :selected-spot="selectedSpot"
+          style="flex: 2"
         />
 
         <ResultBasics
-          style="flex: 5"
           :cards="cards"
-          :selected-spot="selectedSpot"
-          :selected-chance="selectedChance"
           :current-board="currentBoard"
-          :total-bet-amount="totalBetAmount"
-          :results="results"
           :display-options="displayOptions"
-          display-player="ip"
           :is-compare-mode="true"
+          :results="results"
+          :selected-chance="selectedChance"
+          :selected-spot="selectedSpot"
+          :total-bet-amount="totalBetAmount"
+          display-player="ip"
+          style="flex: 5"
         />
       </template>
 
       <template v-else-if="displayMode === 'chance' && selectedChance">
         <ResultChance
-          :selected-spot="selectedSpot"
-          :selected-chance="selectedChance"
           :chance-reports="chanceReports"
           :display-options="displayOptions"
           :display-player="displayPlayerChance"
+          :selected-chance="selectedChance"
+          :selected-spot="selectedSpot"
           @deal-card="onDealCard"
         />
       </template>
@@ -134,20 +134,20 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
 import { computed, ref } from "vue";
 import { useStore } from "../store";
 import * as invokes from "../invokes";
 
 import {
-  Results,
   ChanceReports,
-  Spot,
-  SpotChance,
-  SpotPlayer,
   DisplayMode,
   DisplayOptions,
   HoverContent,
+  Results,
+  Spot,
+  SpotChance,
+  SpotPlayer,
 } from "../result-types";
 
 import ResultNav from "./ResultNav.vue";

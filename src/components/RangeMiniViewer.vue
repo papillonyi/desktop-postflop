@@ -13,11 +13,11 @@
           "
         >
           <div
-            class="absolute w-full h-full left-0 top-0 bg-bottom bg-no-repeat"
             :style="{
               'background-image': `linear-gradient(${yellow500} 0% 100%)`,
               'background-size': `100% ${cellValue(row, col)}%`,
             }"
+            class="absolute w-full h-full left-0 top-0 bg-bottom bg-no-repeat"
           ></div>
         </div>
       </td>
@@ -25,7 +25,7 @@
   </table>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
 import { useStore } from "../store";
 
 const yellow500 = "#eab308";

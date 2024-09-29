@@ -61,7 +61,6 @@
             <th
               v-for="column in columns"
               :key="column.label"
-              scope="col"
               :class="
                 'whitespace-nowrap select-none ' +
                 (column.type === 'card'
@@ -78,6 +77,7 @@
                     ? '6'
                     : '3.5') + 'rem',
               }"
+              scope="col"
               @click="column.type !== 'bar' && sortBy(columnIndex(column))"
             >
               <span
@@ -94,7 +94,6 @@
             <th
               v-for="column in columns"
               :key="column.label"
-              scope="col"
               :class="
                 'header-divider ' +
                 (column.type === 'card'
@@ -107,6 +106,7 @@
               :style="{
                 height: column.type === 'bar' ? 'calc(1.9rem + 1px)' : 'auto',
               }"
+              scope="col"
               @click="column.type !== 'bar' && sortBy(columnIndex(column))"
             >
               <template v-if="column.type === 'card'">
@@ -116,10 +116,10 @@
               <template v-else-if="column.type === 'bar'">
                 <div
                   v-if="summary && column.label === 'Strategy'"
-                  class="w-full h-full bg-neutral-800 bg-left bg-no-repeat"
                   :style="{
                     'background-image': strategyBarBgImage(summary),
                   }"
+                  class="w-full h-full bg-neutral-800 bg-left bg-no-repeat"
                 ></div>
               </template>
 
@@ -185,10 +185,10 @@
                   summary &&
                   (column.type === 'action' || column.type === 'action-ev')
                 "
-                class="absolute w-12 h-1 bottom-0 inset-x-0 mx-auto"
                 :style="{
                   background: actionBarBg(column.index, summary),
                 }"
+                class="absolute w-12 h-1 bottom-0 inset-x-0 mx-auto"
               ></div>
             </th>
           </tr>
@@ -245,11 +245,11 @@
 
               <template v-else-if="column.type === 'bar'">
                 <div
-                  class="w-full h-full bg-neutral-800 bg-left bg-no-repeat"
                   :style="{
                     'background-image': strategyBarBgImage(item),
                     'background-size': strategyBarBgSize(item),
                   }"
+                  class="w-full h-full bg-neutral-800 bg-left bg-no-repeat"
                 ></div>
               </template>
 
@@ -301,10 +301,10 @@
 
               <div
                 v-if="column.type === 'action' || column.type === 'action-ev'"
-                class="absolute w-12 h-1 bottom-0 inset-x-0 mx-auto"
                 :style="{
                   background: actionBarBg(column.index, item),
                 }"
+                class="absolute w-12 h-1 bottom-0 inset-x-0 mx-auto"
               ></div>
             </td>
           </tr>
@@ -312,9 +312,9 @@
           <!-- No results -->
           <tr v-if="resultsRendered.length === 0">
             <td
+              :colspan="columns.length"
               class="relative bg-gray-50 row-divider"
               style="height: calc(1.9rem + 1px)"
-              :colspan="columns.length"
             >
               {{
                 tableMode === "chance"
@@ -345,27 +345,27 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
 import { computed, reactive, ref, toRefs, watch } from "vue";
 
 import {
+  capitalize,
+  cardPairOrder,
+  cardText,
   ranks,
   suitLetters,
-  cardText,
-  cardPairOrder,
-  toFixed1,
   toFixed,
+  toFixed1,
   toFixedAdaptive,
-  capitalize,
 } from "../utils";
 
 import {
-  Results,
   ChanceReports,
-  Spot,
-  SpotPlayer,
   contentGraphsList,
   HoverContent,
+  Results,
+  Spot,
+  SpotPlayer,
   TableMode,
 } from "../result-types";
 

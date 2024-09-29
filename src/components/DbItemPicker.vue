@@ -30,9 +30,9 @@
           v-if="item0.isEditing"
           ref="nameInput"
           v-model="editingName"
-          type="text"
           :class="'px-1 py-0 text-sm ' + (!isNameValid ? 'input-error' : '')"
           style="width: calc(100% - 1.25rem)"
+          type="text"
           @blur="tryRename(item0)"
           @keydown.enter="tryRename(item0)"
           @keydown.escape="cancelRename(item0)"
@@ -48,10 +48,10 @@
         >
           <input
             v-model="selectedValue"
-            type="radio"
             :name="`item-picker-${storeName}-${index}`"
-            class="sr-only peer"
             :value="item0.pathStr"
+            class="sr-only peer"
+            type="radio"
           />
           <span
             class="inline-block px-1 rounded-sm whitespace-nowrap peer-checked:bg-blue-600 peer-checked:text-white"
@@ -63,8 +63,8 @@
         <!-- Group items -->
         <div
           v-if="item0.opened"
-          class="group"
           :style="{ '--guide-decrease': guideDecrease(item0) }"
+          class="group"
         >
           <!-- Empty group -->
           <div v-if="item0.items.length === 0" class="item-inside">
@@ -91,11 +91,11 @@
                 v-if="item1.isEditing"
                 ref="nameInput"
                 v-model="editingName"
-                type="text"
                 :class="
                   'px-1 py-0 text-sm ' + (!isNameValid ? 'input-error' : '')
                 "
                 style="width: calc(100% - 1.25rem)"
+                type="text"
                 @blur="tryRename(item1)"
                 @keydown.enter="tryRename(item1)"
                 @keydown.escape="cancelRename(item1)"
@@ -111,10 +111,10 @@
               >
                 <input
                   v-model="selectedValue"
-                  type="radio"
                   :name="`item-picker-${storeName}-${index}`"
-                  class="sr-only peer"
                   :value="item1.pathStr"
+                  class="sr-only peer"
+                  type="radio"
                 />
                 <span
                   class="inline-block px-1 rounded-sm whitespace-nowrap peer-checked:bg-blue-600 peer-checked:text-white"
@@ -126,10 +126,10 @@
               <!-- Group items -->
               <div
                 v-if="item1.opened"
-                class="group"
                 :style="{
                   '--guide-decrease': guideDecrease(item1),
                 }"
+                class="group"
               >
                 <!-- Empty group -->
                 <div v-if="item1.items.length === 0" class="item-inside">
@@ -156,12 +156,12 @@
                       v-if="item2.isEditing"
                       ref="nameInput"
                       v-model="editingName"
-                      type="text"
                       :class="
                         'px-1 py-0 text-sm ' +
                         (!isNameValid ? 'input-error' : '')
                       "
                       style="width: calc(100% - 1.25rem)"
+                      type="text"
                       @blur="tryRename(item2)"
                       @keydown.enter="tryRename(item2)"
                       @keydown.escape="cancelRename(item2)"
@@ -177,10 +177,10 @@
                     >
                       <input
                         v-model="selectedValue"
-                        type="radio"
                         :name="`item-picker-${storeName}-${index}`"
-                        class="sr-only peer"
                         :value="item2.pathStr"
+                        class="sr-only peer"
+                        type="radio"
                       />
                       <span
                         class="inline-block px-1 rounded-sm whitespace-nowrap peer-checked:bg-blue-600 peer-checked:text-white"
@@ -192,10 +192,10 @@
                     <!-- Group items -->
                     <div
                       v-if="item2.opened"
-                      class="group"
                       :style="{
                         '--guide-decrease': guideDecrease(item2),
                       }"
+                      class="group"
                     >
                       <!-- Empty group -->
                       <div v-if="item2.items.length === 0" class="item-inside">
@@ -213,11 +213,11 @@
                           v-if="item3.isEditing"
                           ref="nameInput"
                           v-model="editingName"
-                          type="text"
                           :class="
                             'px-1 py-0 w-full text-sm ' +
                             (!isNameValid ? 'input-error' : '')
                           "
+                          type="text"
                           @blur="tryRename(item3)"
                           @keydown.enter="tryRename(item3)"
                           @keydown.escape="cancelRename(item3)"
@@ -233,10 +233,10 @@
                         >
                           <input
                             v-model="selectedValue"
-                            type="radio"
                             :name="`item-picker-${storeName}-${index}`"
-                            class="sr-only peer"
                             :value="item3.pathStr"
+                            class="sr-only peer"
+                            type="radio"
                           />
                           <span
                             class="inline-block px-1 rounded-sm whitespace-nowrap peer-checked:bg-blue-600 peer-checked:text-white"
@@ -254,11 +254,11 @@
                       v-if="item2.isEditing"
                       ref="nameInput"
                       v-model="editingName"
-                      type="text"
                       :class="
                         'px-1 py-0 w-full text-sm ' +
                         (!isNameValid ? 'input-error' : '')
                       "
+                      type="text"
                       @blur="tryRename(item2)"
                       @keydown.enter="tryRename(item2)"
                       @keydown.escape="cancelRename(item2)"
@@ -274,10 +274,10 @@
                     >
                       <input
                         v-model="selectedValue"
-                        type="radio"
                         :name="`item-picker-${storeName}-${index}`"
-                        class="sr-only peer"
                         :value="item2.pathStr"
+                        class="sr-only peer"
+                        type="radio"
                       />
                       <span
                         class="inline-block px-1 rounded-sm whitespace-nowrap peer-checked:bg-blue-600 peer-checked:text-white"
@@ -296,11 +296,11 @@
                 v-if="item1.isEditing"
                 ref="nameInput"
                 v-model="editingName"
-                type="text"
                 :class="
                   'px-1 py-0 w-full text-sm ' +
                   (!isNameValid ? 'input-error' : '')
                 "
+                type="text"
                 @blur="tryRename(item1)"
                 @keydown.enter="tryRename(item1)"
                 @keydown.escape="cancelRename(item1)"
@@ -316,10 +316,10 @@
               >
                 <input
                   v-model="selectedValue"
-                  type="radio"
                   :name="`item-picker-${storeName}-${index}`"
-                  class="sr-only peer"
                   :value="item1.pathStr"
+                  class="sr-only peer"
+                  type="radio"
                 />
                 <span
                   class="inline-block px-1 rounded-sm whitespace-nowrap peer-checked:bg-blue-600 peer-checked:text-white"
@@ -338,10 +338,10 @@
           v-if="item0.isEditing"
           ref="nameInput"
           v-model="editingName"
-          type="text"
           :class="
             'px-1 py-0 w-full text-sm ' + (!isNameValid ? 'input-error' : '')
           "
+          type="text"
           @blur="tryRename(item0)"
           @keydown.enter="tryRename(item0)"
           @keydown.escape="cancelRename(item0)"
@@ -357,10 +357,10 @@
         >
           <input
             v-model="selectedValue"
-            type="radio"
             :name="`item-picker-${storeName}-${index}`"
-            class="sr-only peer"
             :value="item0.pathStr"
+            class="sr-only peer"
+            type="radio"
           />
           <span
             class="inline-block px-1 rounded-sm whitespace-nowrap peer-checked:bg-blue-600 peer-checked:text-white"
@@ -379,24 +379,24 @@
   <div class="flex flex-col mt-4 gap-3">
     <div class="grid grid-cols-3 w-full gap-3">
       <button
-        class="button-base button-blue button-overrides"
         :disabled="selectedItem?.item?.isGroup ?? true"
+        class="button-base button-blue button-overrides"
         @click="loadItem()"
       >
         Load
       </button>
 
       <button
-        class="button-base button-blue button-overrides"
         :disabled="errorOccured || !allowSave || isEditing"
+        class="button-base button-blue button-overrides"
         @click="addOrOverwriteItem()"
       >
         {{ selectedItem?.item?.isGroup === false ? "Overwrite" : "Save" }}
       </button>
 
       <button
-        class="button-base button-blue button-overrides"
         :disabled="errorOccured || selectedValue === false"
+        class="button-base button-blue button-overrides"
         @click="renameItem()"
       >
         Rename
@@ -405,7 +405,6 @@
 
     <div class="grid grid-cols-2 w-full gap-3">
       <button
-        class="button-base button-blue button-overrides"
         :disabled="
           errorOccured ||
           (selectedItem !== null &&
@@ -413,14 +412,15 @@
               (selectedItem.item.isGroup ? 1 : 0) >=
               4)
         "
+        class="button-base button-blue button-overrides"
         @click="addGroup()"
       >
         Add Group
       </button>
 
       <button
-        class="button-base button-red button-overrides"
         :disabled="errorOccured || selectedValue === false"
+        class="button-base button-red button-overrides"
         @click="deleteItem(true)"
       >
         Delete
@@ -428,8 +428,8 @@
 
       <button
         v-if="!hideImportExport"
-        class="button-base button-green button-overrides"
         :disabled="errorOccured || isEditing"
+        class="button-base button-green button-overrides"
         @click="importJson"
       >
         Import JSON
@@ -437,8 +437,8 @@
 
       <button
         v-if="!hideImportExport"
-        class="button-base button-green button-overrides"
         :disabled="errorOccured || isEditing"
+        class="button-base button-green button-overrides"
         @click="exportJson"
       >
         Export JSON
@@ -463,7 +463,7 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
 import { computed, nextTick, ref } from "vue";
 import * as Db from "../db";
 

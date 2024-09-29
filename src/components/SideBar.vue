@@ -56,9 +56,9 @@
   </aside>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
 import { computed } from "vue";
-import { SideView, useStore, useConfigStore } from "../store";
+import { SideView, useConfigStore, useStore } from "../store";
 import { cardText } from "../utils";
 
 import RangeMiniViewer from "./RangeMiniViewer.vue";

@@ -192,7 +192,7 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
 import { reactive, ref, toRefs, watch } from "vue";
 import { capitalize } from "../utils";
 import * as Types from "../result-types";
