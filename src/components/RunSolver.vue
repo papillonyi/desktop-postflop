@@ -334,7 +334,7 @@
       <DbItemPicker
         :allow-save="isInputValid"
         :value="dbValue"
-        store-name="configurations"
+        store-name="game"
         @load-item="loadConfig"
       />
     </div>
