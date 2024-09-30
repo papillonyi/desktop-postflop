@@ -348,3 +348,8 @@ export const gameGetChanceReports = async (
     strategy: reports.strategy,
   };
 };
+
+
+export const saveGameToBin = async () => {
+  await invoke("save_game_to_bin", );
+};

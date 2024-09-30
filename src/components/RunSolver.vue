@@ -330,14 +330,14 @@
         </div>
       </div>
     </div>
-    <div class="flex-grow max-w-[17rem] mt-1 ml-6">
-      <DbItemPicker
-        :allow-save="isInputValid"
-        :value="dbValue"
-        store-name="game"
-        @load-item="loadConfig"
-      />
-    </div>
+<!--    <div class="flex-grow max-w-[17rem] mt-1 ml-6">-->
+<!--      <DbItemPicker-->
+<!--        :allow-save="isInputValid"-->
+<!--        :value="dbValue"-->
+<!--        store-name="game"-->
+<!--        @load-item="loadConfig"-->
+<!--      />-->
+<!--    </div>-->
   </div>
 </template>
 
