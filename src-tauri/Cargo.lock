@@ -2025,7 +2025,6 @@ dependencies = [
 [[package]]
 name = "postflop-solver"
 version = "0.1.0"
-source = "git+https://github.com/b-inary/postflop-solver#9d1509fe5077d019825f833eed04b16d342dfda1"
 dependencies = [
  "bincode",
  "once_cell",
