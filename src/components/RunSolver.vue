@@ -286,7 +286,7 @@
           <button
             :disabled="!store.hasSolverRun"
             class="button-base button-blue"
-            @click="runSolver"
+            @click="saveGame"
           >
             Save
           </button>
@@ -330,14 +330,14 @@
         </div>
       </div>
     </div>
-<!--    <div class="flex-grow max-w-[17rem] mt-1 ml-6">-->
-<!--      <DbItemPicker-->
-<!--        :allow-save="isInputValid"-->
-<!--        :value="dbValue"-->
-<!--        store-name="game"-->
-<!--        @load-item="loadConfig"-->
-<!--      />-->
-<!--    </div>-->
+    <!--    <div class="flex-grow max-w-[17rem] mt-1 ml-6">-->
+    <!--      <DbItemPicker-->
+    <!--        :allow-save="isInputValid"-->
+    <!--        :value="dbValue"-->
+    <!--        store-name="game"-->
+    <!--        @load-item="loadConfig"-->
+    <!--      />-->
+    <!--    </div>-->
   </div>
 </template>
 
@@ -362,7 +362,6 @@ import * as invokes from "../invokes";
 
 import { Tippy } from "vue-tippy";
 import { QuestionMarkCircleIcon } from "@heroicons/vue/20/solid";
-import DbItemPicker from "./DbItemPicker.vue";
 
 const checkConfig = (
   config: ReturnType<typeof useConfigStore>
@@ -574,7 +573,6 @@ const timeText = computed(() => {
 
 const buildTree = async () => {
   isTreeBuilt.value = false;
-
   const configError = checkConfig(config);
   if (configError !== null) {
     treeStatus.value = `Error: ${configError}`;
@@ -682,6 +680,12 @@ const runSolver = async () => {
   exploitabilityUpdated = true;
 
   await resumeSolver();
+};
+
+const saveGame = async () => {
+  console.log("test");
+  await invokes.saveGameToBin("D:\\saved_games\\test");
+
 };
 
 const resumeSolver = async () => {

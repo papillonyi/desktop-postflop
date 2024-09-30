@@ -538,13 +538,24 @@ pub fn game_get_chance_reports(
 const MAGIC: u32 = 0x09f15790;
 const VERSION: u8 = 1;
 
+struct NewPostFlowGame<'a> (
+    tauri::State<'a, Mutex<PostFlopGame>>
+);
+
+impl bincode::enc::Encode for NewPostFlowGame<'_> {
+    fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
+        self.0.lock().unwrap().encode(encoder)
+    }
+}
+
 #[tauri::command]
 pub fn save_game_to_bin(
     game_state: tauri::State<Mutex<PostFlopGame>>,
+    path: String
 ) {
     // let  game = game_state.lock().unwrap();
 
-    let file = File::create("filename.bin").map_err(|e| format!("Failed to create file: {}", e)).unwrap();
+    let file = File::create(path).map_err(|e| format!("Failed to create file: {}", e)).unwrap();
     let mut writer = BufWriter::new(file);
     let compression_level: Option<i32> = None;
     let memo = "memo string";
@@ -576,14 +587,12 @@ pub fn save_game_to_bin(
     }
 }
 
-
-struct NewPostFlowGame<'a> (
-    tauri::State<'a, Mutex<PostFlopGame>>
-);
-
-impl bincode::enc::Encode for NewPostFlowGame<'_> {
-    fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
-        self.0.lock().unwrap().encode(encoder)
+#[tauri::command]
+pub fn load_game_from_bin(
+    game_state: tauri::State<Mutex<PostFlopGame>>,
+    path: String
+)
+{
     }
-}
+
 

@@ -12,7 +12,7 @@
   },
   "tauri": {
     "allowlist": {
-      "dialog": { "open": true, "save": true },
+      "dialog": { "open": true, "save": true, "all": true },
       "fs": { "readFile": true, "writeFile": true },
       "shell": { "open": "^https://github.com/" }
     },

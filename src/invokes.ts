@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api";
-import { Results, ChanceReports } from "./result-types";
+import { ChanceReports, Results } from "./result-types";
+import { message } from '@tauri-apps/api/dialog';
 
 export const osName = async (): Promise<"windows" | "macos" | "linux"> => {
   return await invoke("os_name");
@@ -349,7 +350,8 @@ export const gameGetChanceReports = async (
   };
 };
 
-
-export const saveGameToBin = async () => {
-  await invoke("save_game_to_bin", );
+export const saveGameToBin = async (path: string) => {
+  await message('try to save', 'Tauri');
+  await invoke("save_game_to_bin", {path});
+  await message('finish saved', 'Tauri');
 };
