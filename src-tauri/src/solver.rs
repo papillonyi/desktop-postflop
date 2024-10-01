@@ -589,12 +589,29 @@ pub fn save_game_to_bin(
 
 #[tauri::command]
 pub fn load_game_from_bin(
+    range_state: tauri::State<Mutex<RangeManager>>,
     game_state: tauri::State<Mutex<PostFlopGame>>,
     path: String,
 )
 {
     let (game, _memo_string): (PostFlopGame, _) = load_data_from_file(path, None).unwrap();
     *game_state.lock().unwrap() = game;
+    let ranges = &mut range_state.lock().unwrap().0;
+    let game_ranges = game_state.lock().unwrap().card_config().range;
+    ranges[0] = game_ranges[0];
+    ranges[1] = game_ranges[1];
 }
+
+#[tauri::command]
+pub fn load_board_from_bin(
+
+    game_state: tauri::State<Mutex<PostFlopGame>>,
+) -> Vec<u8>
+{
+    let board = game_state.lock().unwrap().card_config().flop.try_into().unwrap();
+    board
+}
+
+
 
 
