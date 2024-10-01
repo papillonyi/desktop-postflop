@@ -551,7 +551,7 @@ impl bincode::enc::Encode for NewPostFlowGame<'_> {
 #[tauri::command]
 pub fn save_game_to_bin(
     game_state: tauri::State<Mutex<PostFlopGame>>,
-    path: String
+    path: String,
 ) {
     // let  game = game_state.lock().unwrap();
 
@@ -590,9 +590,11 @@ pub fn save_game_to_bin(
 #[tauri::command]
 pub fn load_game_from_bin(
     game_state: tauri::State<Mutex<PostFlopGame>>,
-    path: String
+    path: String,
 )
 {
-    }
+    let (game, _memo_string): (PostFlopGame, _) = load_data_from_file(path, None).unwrap();
+    *game_state.lock().unwrap() = game;
+}
 
 
