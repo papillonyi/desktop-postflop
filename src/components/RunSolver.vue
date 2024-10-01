@@ -698,6 +698,8 @@ const saveGame = async () => {
 const loadGame = async () => {
   console.log("test");
   await invokes.loadGameFromBin("D:\\saved_games\\test");
+  config.board = await invokes.loadBoardFromGame();
+  // store.ranges = await invokes.
 };
 
 const resumeSolver = async () => {

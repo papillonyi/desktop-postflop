@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api";
 import { ChanceReports, Results } from "./result-types";
-import { message } from '@tauri-apps/api/dialog';
+import { message } from "@tauri-apps/api/dialog";
 
 export const osName = async (): Promise<"windows" | "macos" | "linux"> => {
   return await invoke("os_name");
@@ -359,3 +359,8 @@ export const loadGameFromBin = async (path: string) => {
   await invoke("load_game_from_bin", { path });
   await message('finish load', 'Tauri');
 };
+
+export const loadBoardFromGame = async () :Promise< number[]> => {
+  await message('load board', 'Tauri');
+  return await invoke("load_board_from_bin");
+}
