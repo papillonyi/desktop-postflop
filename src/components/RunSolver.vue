@@ -290,6 +290,14 @@
           >
             Save
           </button>
+
+          <button
+              :disabled="!store.hasSolverRun"
+              class="button-base button-blue"
+              @click="loadGame"
+          >
+            Load
+          </button>
         </div>
 
         <div
@@ -685,7 +693,11 @@ const runSolver = async () => {
 const saveGame = async () => {
   console.log("test");
   await invokes.saveGameToBin("D:\\saved_games\\test");
+};
 
+const loadGame = async () => {
+  console.log("test");
+  await invokes.loadGameFromBin("D:\\saved_games\\test");
 };
 
 const resumeSolver = async () => {

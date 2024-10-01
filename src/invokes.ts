@@ -351,7 +351,11 @@ export const gameGetChanceReports = async (
 };
 
 export const saveGameToBin = async (path: string) => {
-  await message('try to save', 'Tauri');
-  await invoke("save_game_to_bin", {path});
+  await invoke("save_game_to_bin", { path });
   await message('finish saved', 'Tauri');
+};
+
+export const loadGameFromBin = async (path: string) => {
+  await invoke("load_game_from_bin", { path });
+  await message('finish load', 'Tauri');
 };
