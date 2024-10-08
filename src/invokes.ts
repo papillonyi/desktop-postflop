@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api";
+import { invoke } from "@tauri-apps/api/core";
 import { Results, ChanceReports } from "./result-types";
 
 export const osName = async (): Promise<"windows" | "macos" | "linux"> => {

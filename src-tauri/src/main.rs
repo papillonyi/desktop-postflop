@@ -19,6 +19,9 @@ use sysinfo::{System, SystemExt};
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_fs::init())
         .manage(Mutex::new(RangeManager::default()))
         .manage(Mutex::new(default_action_tree()))
         .manage(Mutex::new(None as Option<BunchingData>))
