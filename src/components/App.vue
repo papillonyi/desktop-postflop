@@ -54,6 +54,12 @@
     >
       <ResultViewer />
     </div>
+    <div
+      v-show="store.navView === 'game'"
+      style="height: calc(max(100%, 720px) - 2.5rem)"
+    >
+      <GameViewer />
+    </div>
   </div>
 </template>
 
@@ -70,6 +76,7 @@ import BunchingEffect from "./BunchingEffect.vue";
 import RunSolver from "./RunSolver.vue";
 import AboutPage from "./AboutPage.vue";
 import ResultViewer from "./ResultViewer.vue";
+import GameViewer from "./GameViewer.vue";
 
 const store = useStore();
 const header = computed(() => store.headers[store.sideView].join(" > "));

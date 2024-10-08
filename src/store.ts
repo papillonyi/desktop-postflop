@@ -228,3 +228,13 @@ export const useSavedConfigStore = defineStore("savedConfig", {
     removedLines: "",
   }),
 });
+
+export const useGameStore = defineStore("game", {
+  state: () => ({
+    playerPosition: "oop",
+    playerPositionInt: 0,
+    rest: true as boolean,
+    robotActions: [] as ActionChance[],
+    playersInfo: [] as PlayInfo[],
+  }),
+});
