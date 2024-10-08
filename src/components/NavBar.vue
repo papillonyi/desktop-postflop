@@ -49,6 +49,17 @@
           <ChartBarIcon class="w-6 h-6" />
           <span class="pl-3">Results</span>
         </button>
+        <button
+          :class="
+            'flex relative w-32 items-center justify-center font-semibold ' +
+            'transition-colors hover:bg-slate-700 hover:text-blue-200 ' +
+            (store.navView === 'game' ? 'bg-slate-700 text-blue-200' : '')
+          "
+          @click="store.navView = 'game'"
+        >
+          <ChartBarIcon class="w-6 h-6" />
+          <span class="pl-3">Game</span>
+        </button>
       </div>
     </div>
   </nav>
