@@ -11,6 +11,7 @@ use crate::bunching::*;
 use crate::range::*;
 use crate::solver::*;
 use crate::tree::*;
+use tauri::Manager;
 
 use postflop_solver::*;
 use rayon::{ThreadPool, ThreadPoolBuilder};
@@ -73,6 +74,14 @@ fn main() {
             game_get_results,
             game_get_chance_reports
         ])
+        .setup(|app| {
+            #[cfg(debug_assertions)] // only include this code on debug builds
+            {
+                let window = app.get_webview_window("main").unwrap();
+                window.open_devtools();
+                window.close_devtools();
+            }
+            Ok(())})
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
