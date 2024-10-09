@@ -55,62 +55,6 @@
             >
               {{ card.rank + card.suit }}
             </span>
-            <template
-              v-if="spot.type === 'chance' && spot.selectedIndex !== -1"
-            >
-              <button
-                :class="
-                  'absolute -top-[1.375rem] left-1/2 -ml-3 w-6 h-6 ' +
-                  (isCardAvailable(spot, 0, 1)
-                    ? 'opacity-70 hover:opacity-100 text-gray-700'
-                    : 'text-red-300')
-                "
-                @click.stop="
-                  isCardAvailable(spot, 0, 1) && dealArrow(spot, 0, 1)
-                "
-              >
-                <ChevronUpIcon class="w-full h-full" />
-              </button>
-              <button
-                :class="
-                  'absolute -left-[1.375rem] top-1/2 -mt-3 w-6 h-6 ' +
-                  (isCardAvailable(spot, 1, 0)
-                    ? 'opacity-70 hover:opacity-100 text-gray-700'
-                    : 'text-red-300')
-                "
-                @click.stop="
-                  isCardAvailable(spot, 1, 0) && dealArrow(spot, 1, 0)
-                "
-              >
-                <ChevronLeftIcon class="w-full h-full" />
-              </button>
-              <button
-                :class="
-                  'absolute -right-[1.375rem] top-1/2 -mt-3 w-6 h-6 ' +
-                  (isCardAvailable(spot, -1, 0)
-                    ? 'opacity-70 hover:opacity-100 text-gray-700'
-                    : 'text-red-300')
-                "
-                @click.stop="
-                  isCardAvailable(spot, -1, 0) && dealArrow(spot, -1, 0)
-                "
-              >
-                <ChevronRightIcon class="w-full h-full" />
-              </button>
-              <button
-                :class="
-                  'absolute -bottom-[1.375rem] left-1/2 -ml-3 w-6 h-6 ' +
-                  (isCardAvailable(spot, 0, -1)
-                    ? 'opacity-70 hover:opacity-100 text-gray-700'
-                    : 'text-red-300')
-                "
-                @click.stop="
-                  isCardAvailable(spot, 0, -1) && dealArrow(spot, 0, -1)
-                "
-              >
-                <ChevronDownIcon class="w-full h-full" />
-              </button>
-            </template>
           </div>
           <div
             :class="
@@ -149,7 +93,42 @@
         >
           {{ spot.player.toUpperCase() }}
         </div>
+
+        <div
+          v-if="
+            gameStore.playerPosition === spot.player &&
+            gameStore.playersInfo.length !== 0
+          "
+          style="width: 60px"
+        >
+          <span
+            v-for="card in pairText(
+              gameStore.playersInfo[gameStore.playerPositionInt].cards
+            )"
+            :key="card.rank + card.suit"
+            :class="card.colorClass"
+            style="float: left; display: inline"
+          >
+            {{ card.rank + card.suit }}
+          </span>
+        </div>
+
         <div class="flex-grow overflow-y-auto">
+          <button
+            v-if="
+              gameStore.playerPosition !== spot.player &&
+              spot.actions.every((action) => !action.isSelected)
+            "
+            :class="'flex w-full px-1.5 rounded-md transition-colors hover:bg-blue-100 '"
+            @click.stop="randomPlay(spot.index, spot.actions)"
+          >
+            <span
+              :class="'pr-0.5 font-semibold group-hover:opacity-100 opacity-70'"
+            >
+              random
+            </span>
+          </button>
+
           <button
             v-for="action of spot.actions"
             :key="action.index"
@@ -214,6 +193,26 @@
             (spot.index === selectedSpotIndex ? '' : 'opacity-70')
           "
         >
+          <div style="width: 60px">
+            <span
+              v-for="card in pairText(gameStore.playersInfo[0].cards)"
+              :key="card.rank + card.suit"
+              :class="card.colorClass"
+              style="float: left; display: inline"
+            >
+              {{ card.rank + card.suit }}
+            </span>
+          </div>
+          <div style="width: 60px">
+            <span
+              v-for="card in pairText(gameStore.playersInfo[1].cards)"
+              :key="card.rank + card.suit"
+              :class="card.colorClass"
+              style="float: left; display: inline"
+            >
+              {{ card.rank + card.suit }}
+            </span>
+          </div>
           <div v-if="spot.equityOop === 0 || spot.equityOop === 1" class="px-3">
             {{ ["IP", "OOP"][spot.equityOop] }} Wins
           </div>
@@ -241,8 +240,14 @@
 
 <script setup lang="ts">
 import { computed, nextTick, toRefs, ref, watch } from "vue";
-import { useSavedConfigStore } from "../store";
-import { cardText, average, colorString } from "../utils";
+import { useGameStore, useSavedConfigStore } from "../store";
+import {
+  cardText,
+  average,
+  colorString,
+  pairText,
+  getRandomActionByChanceWithWhitelist,
+} from "../utils";
 import * as invokes from "../invokes";
 
 import {
@@ -344,6 +349,7 @@ const selectedSpotIndex = ref(-1);
 const selectedChanceIndex = ref(-1);
 const isDealing = ref(false);
 const canChanceReports = ref(false);
+const gameStore = useGameStore();
 
 const selectedSpot = computed(() =>
   selectedSpotIndex.value === -1 ||
@@ -761,6 +767,69 @@ const spliceSpotsPlayer = (spotIndex: number, actions: string[]) => {
       };
     }),
   });
+};
+
+const randomPlay = async (
+  spotIndex: number,
+  actions: {
+    index: number;
+    name: string;
+    amount: string;
+    isSelected: boolean;
+    color: string;
+  }[]
+) => {
+  console.log("random play", spotIndex, actions, gameStore.robotActions);
+
+  const actionsWhitelist = actions
+    .filter((action) => {
+      if (!rates.value) {
+        return true;
+      }
+      return (rates.value[action.index] * 100).toFixed(1) !== "0.0";
+    })
+    .map((action) => {
+      if (action.name === "Raise") {
+        return `R ${action.amount}`;
+      } else if (action.name === "Allin") {
+        return `A ${action.amount}`;
+      } else if (action.name === "Bet") {
+        return `B ${action.amount}`;
+      }
+      return action.name;
+    });
+  console.log(actionsWhitelist);
+  // actions.forEach((action) => {
+  //   if (!rates.value) {
+  //     return;
+  //   }
+  //   console.log(
+  //     action.name,
+  //     action.amount,
+  //     (rates.value[action.index] * 100).toFixed(1)
+  //   );
+  // });
+  const selectedAction = getRandomActionByChanceWithWhitelist(
+    gameStore.robotActions,
+    actionsWhitelist
+  );
+  console.log(selectedAction);
+  gameStore.robotActions = [];
+  if (selectedAction) {
+    const finalAction = actions.find((action) => {
+      if (action.name === "Raise") {
+        return `R ${action.amount}` === selectedAction.action;
+      } else if (action.name === "Allin") {
+        return `A ${action.amount}` === selectedAction.action;
+      } else if (action.name === "Bet") {
+        return `B ${action.amount}` === selectedAction.action;
+      }
+      return action.name === selectedAction.action;
+    });
+    if (finalAction) {
+      await play(spotIndex, finalAction.index);
+    }
+  }
 };
 
 const play = async (spotIndex: number, actionIndex: number) => {

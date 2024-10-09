@@ -21,6 +21,9 @@
   </div>
 
   <div v-else class="flex flex-col h-full">
+    <button class="ml-3 button-base button-blue" @click.stop="initPlayInfo">
+      Init
+    </button>
     <GameNav
       :is-handler-updated="isHandlerUpdated"
       :is-locked="isLocked"
@@ -62,7 +65,7 @@
           @update-hover-content="onUpdateHoverContent"
         />
 
-        <ResultTable
+        <GameTable
           style="flex: 3"
           table-mode="basics"
           :cards="cards"
@@ -121,7 +124,7 @@
       </template>
 
       <template v-else-if="displayMode === 'chance' && selectedChance">
-        <ResultChance
+        <GameChance
           :selected-spot="selectedSpot"
           :selected-chance="selectedChance"
           :chance-reports="chanceReports"
@@ -136,7 +139,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { useStore } from "../store";
+import { useGameStore, useStore } from "../store";
 import * as invokes from "../invokes";
 
 import {
@@ -150,14 +153,15 @@ import {
   HoverContent,
 } from "../result-types";
 
-import ResultNav from "./ResultNav.vue";
 import ResultMiddle from "./ResultMiddle.vue";
 import ResultBasics from "./ResultBasics.vue";
-import ResultTable from "./ResultTable.vue";
 import ResultCompare from "./ResultCompare.vue";
 import ResultGraphs from "./ResultGraphs.vue";
 import ResultChance from "./ResultChance.vue";
 import GameNav from "./GameNav.vue";
+import { getRandomItemByWeight, pairText } from "../utils";
+import GameTable from "./GameTable.vue";
+import GameChance from "./GameChance.vue";
 
 const store = useStore();
 
@@ -168,7 +172,7 @@ const isLocked = ref(false);
 
 const cards = ref<number[][]>([[], []]);
 const dealtCard = ref(-1);
-
+const gameStore = useGameStore();
 const selectedSpot = ref<Spot | null>(null);
 const selectedChance = ref<SpotChance | null>(null);
 const currentBoard = ref<number[]>([]);
@@ -312,5 +316,38 @@ const onUpdateHoverContent = (content: HoverContent | null) => {
 
 const onDealCard = (card: number) => {
   dealtCard.value = card;
+};
+
+const initPlayInfo = () => {
+  if (!results.value) return;
+  const oopCards = getRandomItemByWeight(
+    cards.value[0],
+    results.value?.weights[0]
+  );
+  const ipCards = getRandomItemByWeight(
+    cards.value[1],
+    results.value?.weights[1]
+  );
+  gameStore.playersInfo = [];
+  gameStore.playersInfo.push({
+    cards: oopCards,
+    card1: oopCards & 0xff,
+    card2: oopCards >>> 8,
+  });
+
+  gameStore.playersInfo.push({
+    cards: ipCards,
+    card1: ipCards & 0xff,
+    card2: ipCards >>> 8,
+  });
+  gameStore.playerPositionInt = Math.random() < 0.5 ? 0 : 1;
+
+  console.log(
+    "position",
+    gameStore.playerPositionInt,
+    pairText(gameStore.playersInfo[0].cards),
+    pairText(gameStore.playersInfo[1].cards)
+  );
+  // gameStore.rest = false;
 };
 </script>

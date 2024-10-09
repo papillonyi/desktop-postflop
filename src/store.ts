@@ -1,7 +1,8 @@
 import { defineStore } from "pinia";
 import { sanitizeBetString } from "./utils";
+import { ActionChance, PlayInfo } from "./result-types";
 
-export type NavView = "solver" | "results";
+export type NavView = "solver" | "results" | "game";
 
 export type SideView =
   | "oop-range"
@@ -232,7 +233,6 @@ export const useSavedConfigStore = defineStore("savedConfig", {
 export const useGameStore = defineStore("game", {
   state: () => ({
     playerPositionInt: 0,
-    rest: true as boolean,
     robotActions: [] as ActionChance[],
     playersInfo: [] as PlayInfo[],
   }),
@@ -240,7 +240,11 @@ export const useGameStore = defineStore("game", {
     playerPosition: (state) => {
       return state.playerPositionInt === 0 ? "oop" : "ip";
     },
-
-
-  }
+    robotPosition: (state) => {
+      return state.playerPositionInt === 0 ? "ip" : "oop";
+    },
+    robotPositionInt: (state) => {
+      return state.playerPositionInt === 0 ? 1 : 0;
+    },
+  },
 });

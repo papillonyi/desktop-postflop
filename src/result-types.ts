@@ -115,4 +115,16 @@ export type HoverContent = {
   indices: number[];
 };
 
+export type PlayInfo = {
+  cards: number;
+  card1: number;
+  card2: number;
+};
+
+export interface ActionChance {
+  action: string;
+  chance: number;
+  index: number;
+}
+
 export type TableMode = "basics" | "graphs" | "chance";
