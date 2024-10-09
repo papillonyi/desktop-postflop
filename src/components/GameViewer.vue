@@ -21,8 +21,7 @@
   </div>
 
   <div v-else class="flex flex-col h-full">
-
-    <ResultNav
+    <GameNav
       :is-handler-updated="isHandlerUpdated"
       :is-locked="isLocked"
       :cards="cards"
@@ -45,7 +44,7 @@
     />
 
     <div
-      v-if="store.navView === 'results' && selectedSpot && results"
+      v-if="store.navView === 'game' && selectedSpot && results"
       class="flex flex-grow min-h-0"
     >
       <template v-if="displayMode === 'basics'">
@@ -158,6 +157,7 @@ import ResultTable from "./ResultTable.vue";
 import ResultCompare from "./ResultCompare.vue";
 import ResultGraphs from "./ResultGraphs.vue";
 import ResultChance from "./ResultChance.vue";
+import GameNav from "./GameNav.vue";
 
 const store = useStore();
 

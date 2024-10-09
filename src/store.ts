@@ -231,10 +231,16 @@ export const useSavedConfigStore = defineStore("savedConfig", {
 
 export const useGameStore = defineStore("game", {
   state: () => ({
-    playerPosition: "oop",
     playerPositionInt: 0,
     rest: true as boolean,
     robotActions: [] as ActionChance[],
     playersInfo: [] as PlayInfo[],
   }),
+  getters: {
+    playerPosition: (state) => {
+      return state.playerPositionInt === 0 ? "oop" : "ip";
+    },
+
+
+  }
 });
