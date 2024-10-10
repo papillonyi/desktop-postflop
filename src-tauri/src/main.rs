@@ -72,7 +72,12 @@ fn main() {
             game_actions_after,
             game_possible_cards,
             game_get_results,
-            game_get_chance_reports
+            game_get_chance_reports,
+            get_starting_pot,
+            get_effective_stack,
+            load_game_from_path,
+            get_game_board
+
         ])
         .setup(|app| {
             #[cfg(debug_assertions)] // only include this code on debug builds

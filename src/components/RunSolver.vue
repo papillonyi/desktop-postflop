@@ -272,6 +272,17 @@
       >
         Resume
       </button>
+      <button
+        class="button-base button-green"
+        :disabled="filePath === ''"
+        @click="loadGame"
+      >
+        Load
+      </button>
+      <div>
+        <input type="text" v-model="filePath" placeholder="Enter file path" />
+        <p v-if="filePath">File Content: {{ filePath }}</p>
+      </div>
     </div>
 
     <div
@@ -314,21 +325,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, isVNode, ref } from "vue";
 import {
-  useStore,
-  useConfigStore,
-  useTmpConfigStore,
-  useSavedConfigStore,
-  saveConfigTmp,
   saveConfig,
+  saveConfigTmp,
+  useConfigStore,
+  useSavedConfigStore,
+  useStore,
+  useTmpConfigStore,
 } from "../store";
 import {
-  MAX_AMOUNT,
   convertBetString,
-  ROOT_LINE_STRING,
   INVALID_LINE_STRING,
+  MAX_AMOUNT,
   readableLineString,
+  ROOT_LINE_STRING,
 } from "../utils";
 import * as invokes from "../invokes";
 
@@ -474,6 +485,7 @@ const pauseFlag = ref(false);
 const currentIteration = ref(-1);
 const exploitability = ref(Number.POSITIVE_INFINITY);
 const elapsedTimeMs = ref(-1);
+const filePath = ref("");
 
 let startTime = 0;
 let exploitabilityUpdated = false;
@@ -705,5 +717,27 @@ const resumeSolver = async () => {
 
   const end = performance.now();
   elapsedTimeMs.value += end - startTime;
+};
+
+const loadGame = async () => {
+  store.isFinalizing = false;
+  store.isSolverRunning = false;
+  store.isSolverPaused = false;
+  store.isSolverFinished = false;
+  await invokes.loadGameFromFile(filePath.value);
+  // await handler.finalize();
+
+  const gameBoard = await invokes.loadGameBoard();
+  savedConfig.board = Array.from(gameBoard);
+  const startingPot = await invokes.loadStartingPot();
+  const effectiveStack = await invokes.loadEffectiveStack();
+
+  savedConfig.startingPot = startingPot;
+  savedConfig.effectiveStack = effectiveStack;
+
+  store.isFinalizing = false;
+  store.isSolverRunning = false;
+  store.isSolverPaused = false;
+  store.isSolverFinished = true;
 };
 </script>

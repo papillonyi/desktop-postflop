@@ -532,3 +532,33 @@ pub fn game_get_chance_reports(
         strategy,
     }
 }
+
+#[tauri::command]
+pub fn get_starting_pot(game_state: tauri::State<Mutex<PostFlopGame>>,
+) -> i32 {
+    let  game = game_state.lock().unwrap();
+    game.tree_config().starting_pot
+}
+
+
+#[tauri::command]
+pub fn get_effective_stack(game_state: tauri::State<Mutex<PostFlopGame>>,
+) -> i32 {
+    let  game = game_state.lock().unwrap();
+    game.tree_config().effective_stack
+}
+
+#[tauri::command]
+pub fn get_game_board(game_state: tauri::State<Mutex<PostFlopGame>>,
+) -> Vec<u8> {
+    let  game = game_state.lock().unwrap();
+    game.card_config().flop.try_into().unwrap()
+}
+
+#[tauri::command]
+pub fn load_game_from_path(game_state: tauri::State<Mutex<PostFlopGame>>, path: String
+) {
+    // let  game = game_state.lock().unwrap();
+    let game: PostFlopGame  = load_data_from_file(path, None).unwrap().0;
+    *game_state.lock().unwrap() = game;
+}

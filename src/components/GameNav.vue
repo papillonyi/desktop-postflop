@@ -1,7 +1,7 @@
 <template>
   <div
     ref="navDiv"
-    class="flex shrink-0 h-[10.5rem] gap-1 p-1 overflow-x-auto whitespace-nowrap snug"
+    class="flex shrink-0 h-[12.5rem] gap-1 p-1 overflow-x-auto whitespace-nowrap snug"
   >
     <div
       v-for="spot in spots"

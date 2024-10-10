@@ -348,3 +348,18 @@ export const gameGetChanceReports = async (
     strategy: reports.strategy,
   };
 };
+
+export const loadGameFromFile = async (path: string) => {
+  await invoke("load_game_from_path", { path });
+};
+
+export const loadStartingPot = async (): number => {
+  return await invoke("get_starting_pot");
+};
+export const loadEffectiveStack = async (): number => {
+  return await invoke("get_effective_stack");
+};
+
+export const loadGameBoard = async () => {
+  return await invoke("get_game_board");
+};
