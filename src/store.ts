@@ -235,6 +235,7 @@ export const useGameStore = defineStore("game", {
     playerPositionInt: 0,
     robotActions: [] as ActionChance[],
     playersInfo: [] as PlayInfo[],
+    description: "",
   }),
   getters: {
     playerPosition: (state) => {

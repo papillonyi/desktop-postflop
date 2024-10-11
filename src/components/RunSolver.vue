@@ -333,6 +333,7 @@ import {
   saveConfig,
   saveConfigTmp,
   useConfigStore,
+  useGameStore,
   useSavedConfigStore,
   useStore,
   useTmpConfigStore,
@@ -734,11 +735,14 @@ const selectFile = async () => {
   filePath.value = file;
 };
 
+const gameStore = useGameStore();
+
 const loadGame = async () => {
   store.isFinalizing = false;
   store.isSolverRunning = false;
   store.isSolverPaused = false;
   store.isSolverFinished = false;
+  startTime = performance.now();
   await invokes.loadGameFromFile(filePath.value);
   // await handler.finalize();
 
@@ -749,6 +753,21 @@ const loadGame = async () => {
 
   savedConfig.startingPot = startingPot;
   savedConfig.effectiveStack = effectiveStack;
+  const end = performance.now();
+  elapsedTimeMs.value += end - startTime;
+  startTime = 0;
+
+  const filename = filePath.value.split("\\").pop() || "";
+
+  // Remove the prefix and file extension
+  const nameWithoutPrefix = filename
+    .split("_")
+    .slice(1)
+    .join("_")
+    .replace(".bin", "");
+
+  // Replace underscores with spaces
+  gameStore.description = nameWithoutPrefix.replace(/_/g, " ");
 
   store.isFinalizing = false;
   store.isSolverRunning = false;
