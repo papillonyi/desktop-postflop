@@ -22,7 +22,7 @@
 
   <div v-else class="flex flex-col h-full">
     <button class="ml-3 button-base button-blue" @click.stop="initGame">
-      {{gameStore.description}}
+      {{ gameStore.description }}
     </button>
     <GameNav
       :is-handler-updated="isHandlerUpdated"
