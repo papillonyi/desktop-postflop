@@ -21,7 +21,7 @@
   </div>
 
   <div v-else class="flex flex-col h-full">
-    <button class="ml-3 button-base button-blue" @click.stop="initPlayInfo">
+    <button class="ml-3 button-base button-blue" @click.stop="initGame">
       Init
     </button>
     <GameNav
@@ -318,6 +318,20 @@ const onDealCard = (card: number) => {
   dealtCard.value = card;
 };
 
+const initGame = () => {
+  while (true) {
+    initPlayInfo();
+    if (
+      gameStore.playersInfo[0].card1 !== gameStore.playersInfo[1].card1 &&
+      gameStore.playersInfo[0].card1 !== gameStore.playersInfo[1].card2 &&
+      gameStore.playersInfo[0].card2 !== gameStore.playersInfo[1].card1 &&
+      gameStore.playersInfo[0].card2 !== gameStore.playersInfo[1].card1
+    ) {
+      return;
+    }
+  }
+};
+
 const initPlayInfo = () => {
   if (!results.value) return;
   const oopCards = getRandomItemByWeight(
@@ -340,6 +354,7 @@ const initPlayInfo = () => {
     card1: ipCards & 0xff,
     card2: ipCards >>> 8,
   });
+
   gameStore.playerPositionInt = Math.random() < 0.5 ? 0 : 1;
 
   console.log(
@@ -348,6 +363,5 @@ const initPlayInfo = () => {
     pairText(gameStore.playersInfo[0].cards),
     pairText(gameStore.playersInfo[1].cards)
   );
-  // gameStore.rest = false;
 };
 </script>

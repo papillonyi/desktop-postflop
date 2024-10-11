@@ -279,8 +279,11 @@
       >
         Load
       </button>
+      <button class="button-base button-green" @click="selectFile">
+        SelectFile
+      </button>
       <div>
-        <input type="text" v-model="filePath" placeholder="Enter file path" />
+        <!--        <input type="text" v-model="filePath" placeholder="Enter file path" />-->
         <p v-if="filePath">File Content: {{ filePath }}</p>
       </div>
     </div>
@@ -325,7 +328,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, isVNode, ref } from "vue";
+import { computed, ref } from "vue";
 import {
   saveConfig,
   saveConfigTmp,
@@ -342,6 +345,7 @@ import {
   ROOT_LINE_STRING,
 } from "../utils";
 import * as invokes from "../invokes";
+import { open } from "@tauri-apps/plugin-dialog";
 
 import { Tippy } from "vue-tippy";
 import { QuestionMarkCircleIcon } from "@heroicons/vue/20/solid";
@@ -717,6 +721,17 @@ const resumeSolver = async () => {
 
   const end = performance.now();
   elapsedTimeMs.value += end - startTime;
+};
+
+const selectFile = async () => {
+  const file = await open({
+    multiple: false,
+    directory: false,
+  });
+  if (!file) {
+    return;
+  }
+  filePath.value = file;
 };
 
 const loadGame = async () => {

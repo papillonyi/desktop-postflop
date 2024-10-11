@@ -558,7 +558,24 @@ pub fn get_game_board(game_state: tauri::State<Mutex<PostFlopGame>>,
 #[tauri::command]
 pub fn load_game_from_path(game_state: tauri::State<Mutex<PostFlopGame>>, path: String
 ) {
-    // let  game = game_state.lock().unwrap();
     let game: PostFlopGame  = load_data_from_file(path, None).unwrap().0;
     *game_state.lock().unwrap() = game;
 }
+
+// #[tauri::command]
+// fn open_game_bin_file() -> Result<String, String> {
+//     let mut file_name = String::new();
+//
+//     FileDialogBuilder::new()
+//         .pick_file(|file_path| {
+//             if let Some(path) = file_path {
+//                 file_name = path.display().to_string();
+//             }
+//         });
+//
+//     if file_name.is_empty() {
+//         Err("No file selected".into())
+//     } else {
+//         Ok(file_name)
+//     }
+// }

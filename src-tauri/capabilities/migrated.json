@@ -14,6 +14,7 @@
     "dialog:allow-save",
     "fs:default",
     "shell:default",
+    "dialog:default",
     "dialog:default"
   ]
 }

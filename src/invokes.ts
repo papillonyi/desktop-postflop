@@ -353,13 +353,17 @@ export const loadGameFromFile = async (path: string) => {
   await invoke("load_game_from_path", { path });
 };
 
-export const loadStartingPot = async (): number => {
+export const loadStartingPot = async (): Promise<number> => {
   return await invoke("get_starting_pot");
 };
-export const loadEffectiveStack = async (): number => {
+export const loadEffectiveStack = async (): Promise<number> => {
   return await invoke("get_effective_stack");
 };
 
-export const loadGameBoard = async () => {
+export const loadGameBoard = async (): Promise<number[]> => {
   return await invoke("get_game_board");
 };
+
+// export const OpenGameBinFile = async (): Promise<string> => {
+//   return await invoke("open_game_bin_file");
+// }
