@@ -48,9 +48,8 @@
               v-for="card of spotCards(spot)"
               :key="card.rank + card.suit"
               :class="
-                (spot.type === 'root'
-                  ? 'mx-px '
-                  : 'inline-block w-8 text-center ') + card.colorClass
+                 'mx-px '
+                  + card.colorClass
               "
             >
               {{ card.rank + card.suit }}
@@ -162,17 +161,7 @@
               {{ action.name }}
               {{ action.amount === "0" ? "" : action.amount }}
             </span>
-            <span
-              v-if="spot.index === selectedSpotIndex && rates != null"
-              :class="
-                'ml-auto pl-1.5 group-hover:opacity-100 ' +
-                (action.isSelected || spot.index === selectedSpotIndex
-                  ? ''
-                  : 'opacity-70')
-              "
-            >
-              [{{ (rates[action.index] * 100).toFixed(1) }}%]
-            </span>
+
           </button>
         </div>
       </template>
@@ -262,10 +251,6 @@ import {
 import {
   CheckIcon,
   XMarkIcon,
-  ChevronDownIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  ChevronUpIcon,
 } from "@heroicons/vue/20/solid";
 
 const foldColor = { red: 0x3b, green: 0x82, blue: 0xf6 }; // blue-500
@@ -926,9 +911,11 @@ const spotCards = (spot: SpotRoot | SpotChance) => {
   if (spot.type === "root") {
     return currentBoard.value.map((card) => cardText(card));
   } else if (spot.selectedIndex === -1) {
+    // return currentBoard.value.map((card) => cardText(card));
     return [{ rank: "?", suit: "", colorClass: "text-black" }];
   } else {
-    return [cardText(spot.selectedIndex)];
+    return currentBoard.value.map((card) => cardText(card));
+    // return [cardText(spot.selectedIndex)];
   }
 };
 </script>

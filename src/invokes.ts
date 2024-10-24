@@ -349,6 +349,10 @@ export const gameGetChanceReports = async (
   };
 };
 
+export const RandomGameFromFile = async (path: string): Promise<string> => {
+  return await invoke("random_game_from_path", { path });
+};
+
 export const loadGameFromFile = async (path: string) => {
   await invoke("load_game_from_path", { path });
 };

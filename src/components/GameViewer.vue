@@ -21,6 +21,9 @@
   </div>
 
   <div v-else class="flex flex-col h-full">
+    <button class="ml-3 button-base button-green" @click.stop="randomNewGame">
+      Random Game
+    </button>
     <button class="ml-3 button-base button-blue" @click.stop="initGame">
       {{ gameStore.description }}
     </button>
@@ -139,7 +142,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { useGameStore, useStore } from "../store";
+import {useGameStore, useSavedConfigStore, useStore} from "../store";
 import * as invokes from "../invokes";
 
 import {
@@ -317,6 +320,41 @@ const onUpdateHoverContent = (content: HoverContent | null) => {
 const onDealCard = (card: number) => {
   dealtCard.value = card;
 };
+const savedConfig = useSavedConfigStore();
+const randomNewGame = async () => {
+  store.isFinalizing = false;
+  store.isSolverRunning = false;
+  store.isSolverPaused = false;
+  store.isSolverFinished = false;
+  const filePath  = await invokes.RandomGameFromFile("\\\\NAS5905C5\\games\\postflop");
+  // await handler.finalize();
+
+  const gameBoard = await invokes.loadGameBoard();
+  savedConfig.board = Array.from(gameBoard);
+  const startingPot = await invokes.loadStartingPot();
+  const effectiveStack = await invokes.loadEffectiveStack();
+
+  savedConfig.startingPot = startingPot;
+  savedConfig.effectiveStack = effectiveStack;
+
+  const filename = filePath.split("\\").pop() || "";
+
+  // Remove the prefix and file extension
+  const nameWithoutPrefix = filename
+      .split("_")
+      .slice(1)
+      .join("_")
+      .replace(".bin", "");
+
+  // Replace underscores with spaces
+  gameStore.description = nameWithoutPrefix.replace(/_/g, " ");
+
+  store.isFinalizing = false;
+  store.isSolverRunning = false;
+  store.isSolverPaused = false;
+  store.isSolverFinished = true;
+  initGame();
+}
 
 const initGame = () => {
   while (true) {
@@ -325,7 +363,7 @@ const initGame = () => {
       gameStore.playersInfo[0].card1 !== gameStore.playersInfo[1].card1 &&
       gameStore.playersInfo[0].card1 !== gameStore.playersInfo[1].card2 &&
       gameStore.playersInfo[0].card2 !== gameStore.playersInfo[1].card1 &&
-      gameStore.playersInfo[0].card2 !== gameStore.playersInfo[1].card1
+      gameStore.playersInfo[0].card2 !== gameStore.playersInfo[1].card2
     ) {
       return;
     }

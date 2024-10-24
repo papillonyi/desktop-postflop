@@ -727,6 +727,7 @@ const resumeSolver = async () => {
 const selectFile = async () => {
   const file = await open({
     multiple: false,
+    defaultPath: "\\\\NAS5905C5\\games\\postflop",
     directory: false,
   });
   if (!file) {

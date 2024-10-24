@@ -23,6 +23,7 @@ sysinfo = "0.29.10"
 tauri-plugin-fs = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
+rand = "0.8"
 
 [features]
 # by default Tauri runs in production mode

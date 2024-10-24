@@ -787,6 +787,7 @@ name = "desktop-postflop"
 version = "0.2.7"
 dependencies = [
  "postflop-solver",
+ "rand 0.8.5",
  "rayon",
  "serde",
  "serde_json",

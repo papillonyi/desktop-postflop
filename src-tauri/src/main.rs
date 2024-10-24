@@ -76,7 +76,8 @@ fn main() {
             get_starting_pot,
             get_effective_stack,
             load_game_from_path,
-            get_game_board
+            get_game_board,
+            random_game_from_path
 
         ])
         .setup(|app| {

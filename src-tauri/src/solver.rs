@@ -1,8 +1,12 @@
+use std::fs;
+use std::fs::DirEntry;
 use crate::range::*;
 use postflop_solver::*;
 use rayon::ThreadPool;
 use serde::Serialize;
 use std::sync::Mutex;
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 
 #[inline]
 fn decode_action(action: &str) -> Action {
@@ -554,6 +558,33 @@ pub fn get_game_board(game_state: tauri::State<Mutex<PostFlopGame>>,
     let  game = game_state.lock().unwrap();
     game.card_config().flop.try_into().unwrap()
 }
+
+#[tauri::command]
+pub fn random_game_from_path(game_state: tauri::State<Mutex<PostFlopGame>>, path: String
+) -> String{
+
+
+    let files: Vec<_> = match fs::read_dir(path) {
+        Ok(v) => {v}
+        Err(error) => {return error.to_string()}
+    }.filter_map(Result::ok)
+        .filter(|entry| entry.path().is_file())
+        .collect();
+
+    let random_file = match files.choose(&mut thread_rng()){
+        None => {return "no files".to_string()}
+        Some(v) => {v}
+    };
+    match load_data_from_file(random_file.path(), None) {
+        Ok((game, message)) => {
+            *game_state.lock().unwrap() = game;
+            random_file.path().to_string_lossy().to_string()
+        },
+        Err(error) => { error}
+    }
+
+}
+
 
 #[tauri::command]
 pub fn load_game_from_path(game_state: tauri::State<Mutex<PostFlopGame>>, path: String
