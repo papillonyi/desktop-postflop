@@ -2,8 +2,6 @@ use crate::range::*;
 use postflop_solver::*;
 use rayon::ThreadPool;
 use serde::Serialize;
-use std::fs::File;
-use std::io::{BufWriter, Write};
 use std::sync::Mutex;
 
 #[inline]
@@ -52,7 +50,7 @@ fn round(value: f64) -> f64 {
 }
 
 #[inline]
-fn round_iter<'a>(iter: impl Iterator<Item=&'a f32> + 'a) -> impl Iterator<Item=f64> + 'a {
+fn round_iter<'a>(iter: impl Iterator<Item = &'a f32> + 'a) -> impl Iterator<Item = f64> + 'a {
     iter.map(|&x| round(x as f64))
 }
 
@@ -535,56 +533,10 @@ pub fn game_get_chance_reports(
     }
 }
 
-const MAGIC: u32 = 0x09f15790;
-const VERSION: u8 = 1;
-
-struct NewPostFlowGame<'a> (
-    tauri::State<'a, Mutex<PostFlopGame>>
-);
-
-impl bincode::enc::Encode for NewPostFlowGame<'_> {
-    fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
-        self.0.lock().unwrap().encode(encoder)
-    }
-}
-
 #[tauri::command]
-pub fn save_game_to_bin(
-    game_state: tauri::State<Mutex<PostFlopGame>>,
-    path: String,
-) {
-    // let  game = game_state.lock().unwrap();
-
-    let file = File::create(path).map_err(|e| format!("Failed to create file: {}", e)).unwrap();
-    let mut writer = BufWriter::new(file);
-    let compression_level: Option<i32> = None;
-    let memo = "memo string";
-
-    encode_into_std_write(MAGIC, &mut writer, "Failed to write magic number").unwrap();
-    encode_into_std_write(VERSION, &mut writer, "Failed to write version number").unwrap();
-    let compression_type = compression_level.is_some() as u8;
-    encode_into_std_write(compression_type, &mut writer, "Failed to write compression type").unwrap();
-
-    encode_into_std_write(DataType::Game as u8, &mut writer, "Failed to write data type").unwrap();
-    encode_into_std_write(
-        game_state.lock().unwrap().estimated_memory_usage(),
-        &mut writer,
-        "Failed to write memory usage",
-    ).unwrap();
-
-    encode_into_std_write(memo, &mut writer, "Failed to write memo").unwrap();
-
-    let game = NewPostFlowGame(
-        game_state,
-    );
-
-
-    if compression_level.is_none() {
-        encode_into_std_write(game, &mut writer, "Failed to write data").unwrap();
-        writer
-            .flush()
-            .map_err(|e| format!("Failed to flush writer: {}", e)).unwrap();
-    }
+pub fn save_game_to_bin(game_state: tauri::State<Mutex<PostFlopGame>>, path: String) {
+    let game = game_state.lock().unwrap();
+    save_data_to_file(&*game, "memo string", path, None).unwrap();
 }
 
 #[tauri::command]
@@ -592,8 +544,7 @@ pub fn load_game_from_bin(
     range_state: tauri::State<Mutex<RangeManager>>,
     game_state: tauri::State<Mutex<PostFlopGame>>,
     path: String,
-)
-{
+) {
     let (game, _memo_string): (PostFlopGame, _) = load_data_from_file(path, None).unwrap();
     *game_state.lock().unwrap() = game;
     let ranges = &mut range_state.lock().unwrap().0;
@@ -603,15 +554,13 @@ pub fn load_game_from_bin(
 }
 
 #[tauri::command]
-pub fn load_board_from_bin(
-
-    game_state: tauri::State<Mutex<PostFlopGame>>,
-) -> Vec<u8>
-{
-    let board = game_state.lock().unwrap().card_config().flop.try_into().unwrap();
+pub fn load_board_from_bin(game_state: tauri::State<Mutex<PostFlopGame>>) -> Vec<u8> {
+    let board = game_state
+        .lock()
+        .unwrap()
+        .card_config()
+        .flop
+        .try_into()
+        .unwrap();
     board
 }
-
-
-
-

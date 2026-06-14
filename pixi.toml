@@ -6,16 +6,16 @@ version = "0.1.0"
 
 [tasks]
 install = "npm install"
-dev = "npm run tauri dev"
+dev = "RUSTFLAGS='-A dangerous_implicit_autorefs' npm run tauri dev"
 frontend-dev = "npm run dev"
-server-dev = "cargo run --manifest-path src-tauri/Cargo.toml --bin web-server"
-server-check = "cargo check --manifest-path src-tauri/Cargo.toml --bin web-server"
-build = "npm run tauri build"
+server-dev = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo run --manifest-path src-tauri/Cargo.toml --bin web-server"
+server-check = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo check --manifest-path src-tauri/Cargo.toml --bin web-server"
+build = "RUSTFLAGS='-A dangerous_implicit_autorefs' npm run tauri build"
 frontend-build = "npm run build"
 lint = "npm run lint"
 format = "prettier --write src/**/*.{ts,vue}"
-cargo-check = "cargo check --manifest-path src-tauri/Cargo.toml"
-solver-test = "cargo test --manifest-path ../postflop-solver/Cargo.toml"
+cargo-check = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo check --manifest-path src-tauri/Cargo.toml"
+solver-test = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo test --manifest-path ../postflop-solver/Cargo.toml"
 
 [dependencies]
 nodejs = ">=20,<21"
