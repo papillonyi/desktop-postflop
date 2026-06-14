@@ -1,0 +1,20 @@
+[workspace]
+channels = ["conda-forge"]
+name = "desktop-postflop"
+platforms = ["osx-arm64"]
+version = "0.1.0"
+
+[tasks]
+install = "npm install"
+dev = "npm run tauri dev"
+frontend-dev = "npm run dev"
+build = "npm run tauri build"
+frontend-build = "npm run build"
+lint = "npm run lint"
+format = "npm run format"
+cargo-check = "cargo check --manifest-path src-tauri/Cargo.toml"
+solver-test = "cargo test --manifest-path ../postflop-solver/Cargo.toml"
+
+[dependencies]
+nodejs = ">=20,<21"
+rust = ">=1.65,<2"
