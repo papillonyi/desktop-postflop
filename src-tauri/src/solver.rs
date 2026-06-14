@@ -2,6 +2,8 @@ use crate::range::*;
 use postflop_solver::*;
 use rayon::ThreadPool;
 use serde::Serialize;
+use std::fs::File;
+use std::io::{BufWriter, Write};
 use std::sync::Mutex;
 
 #[inline]
@@ -533,10 +535,72 @@ pub fn game_get_chance_reports(
     }
 }
 
+const MAGIC: u32 = 0x09f15790;
+const VERSION: u8 = 1;
+
+struct NewPostFlowGame<'a>(tauri::State<'a, Mutex<PostFlopGame>>);
+
+impl bincode::enc::Encode for NewPostFlowGame<'_> {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        self.0.lock().unwrap().encode(encoder)
+    }
+}
+
+fn encode_into_std_write<E: bincode::enc::Encode, W: Write>(
+    val: E,
+    writer: &mut W,
+    err_msg: &str,
+) -> Result<usize, String> {
+    bincode::encode_into_std_write(val, writer, bincode::config::standard())
+        .map_err(|e| format!("{}: {}", err_msg, e))
+}
+
 #[tauri::command]
 pub fn save_game_to_bin(game_state: tauri::State<Mutex<PostFlopGame>>, path: String) {
-    let game = game_state.lock().unwrap();
-    save_data_to_file(&*game, "memo string", path, None).unwrap();
+    let file = File::create(path)
+        .map_err(|e| format!("Failed to create file: {}", e))
+        .unwrap();
+    let mut writer = BufWriter::new(file);
+    let compression_level: Option<i32> = None;
+    let memo = "memo string";
+
+    encode_into_std_write(MAGIC, &mut writer, "Failed to write magic number").unwrap();
+    encode_into_std_write(VERSION, &mut writer, "Failed to write version number").unwrap();
+    let compression_type = compression_level.is_some() as u8;
+    encode_into_std_write(
+        compression_type,
+        &mut writer,
+        "Failed to write compression type",
+    )
+    .unwrap();
+
+    encode_into_std_write(
+        DataType::Game as u8,
+        &mut writer,
+        "Failed to write data type",
+    )
+    .unwrap();
+    encode_into_std_write(
+        game_state.lock().unwrap().estimated_memory_usage(),
+        &mut writer,
+        "Failed to write memory usage",
+    )
+    .unwrap();
+
+    encode_into_std_write(memo, &mut writer, "Failed to write memo").unwrap();
+
+    let game = NewPostFlowGame(game_state);
+
+    if compression_level.is_none() {
+        encode_into_std_write(game, &mut writer, "Failed to write data").unwrap();
+        writer
+            .flush()
+            .map_err(|e| format!("Failed to flush writer: {}", e))
+            .unwrap();
+    }
 }
 
 #[tauri::command]
