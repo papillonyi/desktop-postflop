@@ -111,7 +111,7 @@ This keeps `cargo check --bin web-server` valid until the real server entrypoint
 
 - [ ] **Step 4: Keep desktop save checkable**
 
-Replace the local duplicated bincode save implementation in `src-tauri/src/solver.rs` with the solver crate's public `save_data_to_file` helper so `pixi run cargo-check` still compiles under the pinned bincode rc.3 dependency.
+Keep the existing local game-save serialization path in `src-tauri/src/solver.rs`, including its ability to save non-finished solver states. Add the missing local `encode_into_std_write` helper and call `bincode::encode_into_std_write(..., bincode::config::standard())` so `pixi run cargo-check` compiles under the pinned bincode rc.3 dependency without introducing the solver crate's `is_ready_to_save()` restriction.
 
 - [ ] **Step 5: Refresh dependency lock**
 
