@@ -6,9 +6,13 @@ authors = ["Wataru Inariba"]
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/b-inary/desktop-postflop/tree/main/src-tauri"
 edition = "2021"
-rust-version = "1.65"
+rust-version = "1.88"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+name = "web-server"
+path = "src/bin/web_server.rs"
 
 [build-dependencies]
 tauri-build = { version = "1.5.0", features = [] }
@@ -21,6 +25,14 @@ postflop-solver = { path = "../../postflop-solver", features = ["custom-alloc"] 
 rayon = "1.8.0"
 sysinfo = "0.29.10"
 bincode = "2.0.0-rc.3"
+axum = { version = "0.8", features = ["multipart"] }
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors", "fs", "limit", "trace"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+thiserror = "2"
+tempfile = "3"
+tokio-util = { version = "0.7", features = ["io"] }
 
 [features]
 # by default Tauri runs in production mode
