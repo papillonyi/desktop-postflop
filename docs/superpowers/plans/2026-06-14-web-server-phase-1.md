@@ -39,6 +39,9 @@
 **Files:**
 - Modify: `pixi.toml`
 - Modify: `src-tauri/Cargo.toml`
+- Modify: `src-tauri/Cargo.lock`
+- Create: `src-tauri/src/bin/web_server.rs`
+- Modify: `src-tauri/src/solver.rs`
 
 - [ ] **Step 1: Edit `pixi.toml`**
 
@@ -47,21 +50,23 @@ Set Rust to a modern stable baseline and add server commands:
 ```toml
 [tasks]
 install = "npm install"
-dev = "npm run tauri dev"
+dev = "RUSTFLAGS='-A dangerous_implicit_autorefs' npm run tauri dev"
 frontend-dev = "npm run dev"
-server-dev = "cargo run --manifest-path src-tauri/Cargo.toml --bin web-server"
-server-check = "cargo check --manifest-path src-tauri/Cargo.toml --bin web-server"
-build = "npm run tauri build"
+server-dev = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo run --manifest-path src-tauri/Cargo.toml --bin web-server"
+server-check = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo check --manifest-path src-tauri/Cargo.toml --bin web-server"
+build = "RUSTFLAGS='-A dangerous_implicit_autorefs' npm run tauri build"
 frontend-build = "npm run build"
 lint = "npm run lint"
 format = "prettier --write src/**/*.{ts,vue}"
-cargo-check = "cargo check --manifest-path src-tauri/Cargo.toml"
-solver-test = "cargo test --manifest-path ../postflop-solver/Cargo.toml"
+cargo-check = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo check --manifest-path src-tauri/Cargo.toml"
+solver-test = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo test --manifest-path ../postflop-solver/Cargo.toml"
 
 [dependencies]
 nodejs = ">=20,<21"
 rust = ">=1.88,<2"
 ```
+
+`postflop-solver` currently contains raw-pointer indexing code that triggers Rust 1.88+'s `dangerous_implicit_autorefs` deny-by-default lint. Keep the compatibility flag scoped to Rust Pixi tasks until the sibling solver crate is updated.
 
 - [ ] **Step 2: Edit `src-tauri/Cargo.toml`**
 
@@ -78,10 +83,10 @@ path = "src/bin/web_server.rs"
 serde_json = "1.0.107"
 serde = { version = "1.0.188", features = ["derive"] }
 tauri = { version = "1.5.0", features = ["dialog-all", "fs-read-file", "fs-write-file", "shell-open"] }
-postflop-solver = { path = "../../postflop-solver", features = ["custom-alloc"] }
+postflop-solver = { path = "../../postflop-solver" }
 rayon = "1.8.0"
 sysinfo = "0.29.10"
-bincode = "2.0.0-rc.3"
+bincode = "=2.0.0-rc.3"
 axum = { version = "0.8", features = ["multipart"] }
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.6", features = ["cors", "fs", "limit", "trace"] }
@@ -92,7 +97,23 @@ tempfile = "3"
 tokio-util = { version = "0.7", features = ["io"] }
 ```
 
-- [ ] **Step 3: Refresh dependency lock**
+Use the stable Rust path for Phase 1. The solver's `custom-alloc` feature requires nightly Rust and conflicts with the stable Pixi baseline. Pin `bincode` exactly to `2.0.0-rc.3` so Cargo does not resolve `bincode_derive` to an incompatible newer release.
+
+- [ ] **Step 3: Create placeholder `src-tauri/src/bin/web_server.rs`**
+
+```rust
+fn main() {
+    eprintln!("web-server entrypoint is not implemented yet");
+}
+```
+
+This keeps `cargo check --bin web-server` valid until the real server entrypoint is added in Task 4.
+
+- [ ] **Step 4: Keep desktop save checkable**
+
+Replace the local duplicated bincode save implementation in `src-tauri/src/solver.rs` with the solver crate's public `save_data_to_file` helper so `pixi run cargo-check` still compiles under the pinned bincode rc.3 dependency.
+
+- [ ] **Step 5: Refresh dependency lock**
 
 Run:
 
@@ -102,7 +123,7 @@ pixi lock
 
 Expected: `pixi.lock` updates successfully.
 
-- [ ] **Step 4: Verify existing frontend still installs**
+- [ ] **Step 6: Verify existing frontend still installs**
 
 Run:
 
@@ -112,10 +133,21 @@ pixi install
 
 Expected: Pixi environment resolves with Rust 1.88+ and Node 20.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Verify Rust targets**
+
+Run:
 
 ```bash
-git add pixi.toml pixi.lock src-tauri/Cargo.toml
+pixi run server-check
+pixi run cargo-check
+```
+
+Expected: both commands pass. Warnings from the sibling `postflop-solver` crate are allowed in this phase.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add pixi.toml pixi.lock src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/src/bin/web_server.rs src-tauri/src/solver.rs
 git commit -m "add web server dependencies"
 ```
 
