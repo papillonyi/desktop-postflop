@@ -49,7 +49,7 @@
 
 - [x] Port board selection components.
 - [x] Port range editor and mini viewer.
-- [ ] Port tree configuration validation and tree editor.
+- [x] Port tree configuration validation and tree editor.
 - [x] Port database item picker and browser JSON import/export.
 - [x] Run `pixi run lint` and `pixi run frontend-build`.
 - [ ] Commit with `port solver setup views to react`.

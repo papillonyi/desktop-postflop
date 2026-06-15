@@ -3,6 +3,7 @@ import { App } from "./App";
 import { AboutPage } from "../features/about/AboutPage";
 import { BoardSelector } from "../features/board/BoardSelector";
 import { RangeEditor } from "../features/ranges/RangeEditor";
+import { TreeConfig } from "../features/tree/TreeConfig";
 import { PlaceholderPage } from "../shared/components/PlaceholderPage";
 
 export const router = createBrowserRouter([
@@ -22,7 +23,7 @@ export const router = createBrowserRouter([
       { path: "solver/board", element: <BoardSelector /> },
       {
         path: "solver/tree",
-        element: <PlaceholderPage title="Tree Configuration" />,
+        element: <TreeConfig />,
       },
       {
         path: "solver/bunching",
