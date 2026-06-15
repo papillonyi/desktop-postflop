@@ -1,0 +1,2140 @@
+import { CheckIcon } from "@heroicons/react/20/solid";
+import {
+  BarElement,
+  CategoryScale,
+  Chart as ChartJS,
+  Legend,
+  LinearScale,
+  LineElement,
+  PointElement,
+  Title,
+  Tooltip,
+} from "chart.js";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Bar, Line } from "react-chartjs-2";
+import { useAppSelector } from "../../app/hooks";
+import type {
+  ChanceReports,
+  DisplayMode,
+  DisplayOptions,
+  HoverContent,
+  Results,
+  Spot,
+  SpotChance,
+  SpotPlayer,
+  SpotRoot,
+} from "../../result-types";
+import {
+  barHeightList,
+  chartChanceList,
+  contentBasicsList,
+  contentGraphsList,
+  playerBasicsList,
+  playerChanceList,
+  strategyList,
+  suitList,
+} from "../../result-types";
+import { BoardCard } from "../../shared/components/BoardCard";
+import * as invokes from "../../invokes";
+import {
+  average,
+  cardId,
+  cardPairCellIndex,
+  cardPairOrder,
+  cardText,
+  colorString,
+  ranks,
+  toFixed1,
+  toFixed2,
+  toFixedAdaptive,
+} from "../../utils";
+
+ChartJS.register(
+  BarElement,
+  CategoryScale,
+  Legend,
+  LinearScale,
+  LineElement,
+  PointElement,
+  Title,
+  Tooltip
+);
+
+type DisplayPlayer = "oop" | "ip";
+
+type LoadedResults = {
+  cards: number[][];
+  chanceReports: ChanceReports | null;
+  currentBoard: number[];
+  results: Results;
+  selectedChance: SpotChance | null;
+  selectedSpot: Spot | null;
+  totalBetAmount: number[];
+};
+
+const defaultDisplayOptions: DisplayOptions = {
+  playerBasics: "auto",
+  playerChance: "auto",
+  barHeight: "normalized",
+  suit: "grouped",
+  strategy: "show",
+  contentBasics: "default",
+  contentGraphs: "eq",
+  chartChance: "strategy-combos",
+};
+
+const foldColor = { red: 0x3b, green: 0x82, blue: 0xf6 };
+const checkColor = { red: 0x22, green: 0xc5, blue: 0x5e };
+const callColor = { red: 0x22, green: 0xc5, blue: 0x5e };
+const yellow500 = "#eab308";
+const sky500 = "#0ea5e9";
+const lime500 = "#84cc16";
+const chanceSuitColors = ["#16a34a", "#2563eb", "#db2777", "#000000"];
+const chanceSuitStacks = ["clubs", "diamonds", "hearts", "spades"];
+const betColorGradient = [
+  { red: 0xf5, green: 0x9e, blue: 0x0b },
+  { red: 0xf9, green: 0x73, blue: 0x16 },
+  { red: 0xef, green: 0x44, blue: 0x44 },
+  { red: 0xec, green: 0x48, blue: 0x99 },
+  { red: 0xd9, green: 0x46, blue: 0xef },
+  { red: 0xa8, green: 0x55, blue: 0xf7 },
+  { red: 0x8b, green: 0x5c, blue: 0xf6 },
+];
+const resultColorGradient = [
+  { red: 0xef, green: 0x44, blue: 0x44 },
+  { red: 0xf9, green: 0x73, blue: 0x16 },
+  { red: 0xf5, green: 0x9e, blue: 0x0b },
+  { red: 0xea, green: 0xb3, blue: 0x08 },
+  { red: 0x84, green: 0xcc, blue: 0x16 },
+  { red: 0x22, green: 0xc5, blue: 0x5e },
+  { red: 0x10, green: 0xb9, blue: 0x81 },
+];
+
+function loadDisplayOptions(): DisplayOptions {
+  const raw = localStorage.getItem("display-options");
+  if (!raw) return defaultDisplayOptions;
+
+  try {
+    const saved = JSON.parse(raw) as Partial<DisplayOptions>;
+    return {
+      playerBasics: playerBasicsList.includes(saved.playerBasics as never)
+        ? saved.playerBasics!
+        : defaultDisplayOptions.playerBasics,
+      playerChance: playerChanceList.includes(saved.playerChance as never)
+        ? saved.playerChance!
+        : defaultDisplayOptions.playerChance,
+      barHeight: barHeightList.includes(saved.barHeight as never)
+        ? saved.barHeight!
+        : defaultDisplayOptions.barHeight,
+      suit: suitList.includes(saved.suit as never)
+        ? saved.suit!
+        : defaultDisplayOptions.suit,
+      strategy: strategyList.includes(saved.strategy as never)
+        ? saved.strategy!
+        : defaultDisplayOptions.strategy,
+      contentBasics: contentBasicsList.includes(saved.contentBasics as never)
+        ? saved.contentBasics!
+        : defaultDisplayOptions.contentBasics,
+      contentGraphs: contentGraphsList.includes(saved.contentGraphs as never)
+        ? saved.contentGraphs!
+        : defaultDisplayOptions.contentGraphs,
+      chartChance: chartChanceList.includes(saved.chartChance as never)
+        ? saved.chartChance!
+        : defaultDisplayOptions.chartChance,
+    };
+  } catch {
+    return defaultDisplayOptions;
+  }
+}
+
+function actionColor(
+  name: string,
+  index: number,
+  numActions: number,
+  numBetActions: number
+) {
+  if (name === "Fold") return colorString(foldColor);
+  if (name === "Check") return colorString(checkColor);
+  if (name === "Call") return colorString(callColor);
+  if (numBetActions <= 1) return colorString(betColorGradient[0]);
+  if (index === numActions - 1) {
+    const denom = numBetActions === 2 ? 2 : 1;
+    return colorString(betColorGradient[(betColorGradient.length - 1) / denom]);
+  }
+
+  const betIndex = index - (numActions - numBetActions);
+  const colorRate = betIndex / (numBetActions - 1);
+  const gradientRate = colorRate * (betColorGradient.length - 1);
+  const gradientIndex = Math.floor(gradientRate);
+  const r = gradientRate - gradientIndex;
+  const color1 = betColorGradient[gradientIndex];
+  const color2 = betColorGradient[gradientIndex + 1];
+  return colorString({
+    red: Math.round(color1.red * (1 - r) + color2.red * r),
+    green: Math.round(color1.green * (1 - r) + color2.green * r),
+    blue: Math.round(color1.blue * (1 - r) + color2.blue * r),
+  });
+}
+
+function resultColor(
+  value: number,
+  lowest: number,
+  middle: number,
+  highest: number
+) {
+  if (!isFinite(value)) return yellow500;
+  if (value <= lowest) return colorString(resultColorGradient[0]);
+  if (value > middle && value >= highest) {
+    return colorString(resultColorGradient[resultColorGradient.length - 1]);
+  }
+
+  const colorRate =
+    value <= middle
+      ? (value - lowest) / (middle - lowest || 1)
+      : (value - middle) / (highest - middle || 1);
+  const gradientRate = colorRate * 3 + (value <= middle ? 0 : 3);
+  const gradientIndex = Math.max(
+    0,
+    Math.min(resultColorGradient.length - 2, Math.floor(gradientRate))
+  );
+  const r = gradientRate - gradientIndex;
+  const color1 = resultColorGradient[gradientIndex];
+  const color2 = resultColorGradient[gradientIndex + 1];
+  return colorString({
+    red: Math.floor(color1.red * (1 - r) + color2.red * r),
+    green: Math.floor(color1.green * (1 - r) + color2.green * r),
+    blue: Math.floor(color1.blue * (1 - r) + color2.blue * r),
+  });
+}
+
+function pairText(pair: number) {
+  const card1 = pair & 0xff;
+  const card2 = pair >>> 8;
+  if (card2 !== 0xff) {
+    return [cardText(card2), cardText(card1)];
+  }
+  return [cardText(card1)];
+}
+
+function downloadText(filename: string, text: string) {
+  const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function formatPercent(value: number) {
+  return Number.isNaN(value) ? "-" : `${toFixed1(value * 100)}%`;
+}
+
+function formatEv(value: number) {
+  return Number.isNaN(value) ? "-" : toFixedAdaptive(value);
+}
+
+function MiniBar({ values }: { values: number[] }) {
+  if (
+    values.length < 2 ||
+    values.some((value) => Number.isNaN(value)) ||
+    (values[0] === 0 && values[1] === 0)
+  ) {
+    return <div className="h-3 rounded bg-neutral-300" />;
+  }
+  const total = values[0] + values[1];
+  const sep = `${(values[0] * 100) / total}%`;
+  return (
+    <div
+      className="h-3 rounded"
+      style={{
+        background: `linear-gradient(to right, ${sky500} ${sep}, ${lime500} ${sep})`,
+      }}
+    />
+  );
+}
+
+function ResultTable({
+  cards,
+  displayPlayer,
+  hoverContent,
+  results,
+  selectedSpot,
+}: {
+  cards: number[][];
+  displayPlayer: DisplayPlayer;
+  hoverContent?: HoverContent | null;
+  results: Results;
+  selectedSpot: Spot | null;
+}) {
+  const playerIndex = displayPlayer === "oop" ? 0 : 1;
+  const actions =
+    selectedSpot?.type === "player" && selectedSpot.player === displayPlayer
+      ? selectedSpot.actions
+      : [];
+  const numActions = actions.length || 0;
+
+  const rows = useMemo(() => {
+    const playerCards = cards[playerIndex] ?? [];
+    const ret: number[][] = [];
+    for (let i = 0; i < playerCards.length; ++i) {
+      if (hoverContent && !hoverContent.indices.includes(i)) continue;
+      const weight = results.weights[playerIndex][i];
+      const normalizer = results.normalizer[playerIndex][i];
+      if (weight === 0 || normalizer === 0) continue;
+      const row = [
+        playerCards[i],
+        weight,
+        normalizer,
+        results.equity[playerIndex][i] ?? Number.NaN,
+        results.ev[playerIndex][i] ?? Number.NaN,
+        results.eqr[playerIndex][i] ?? Number.NaN,
+      ];
+      for (let action = 0; action < numActions; ++action) {
+        const index = action * playerCards.length + i;
+        row.push(results.strategy[index] ?? 0);
+        row.push(results.actionEv[index] ?? 0);
+      }
+      ret.push(row);
+    }
+    ret.sort((a, b) => cardPairOrder(a[0]) - cardPairOrder(b[0]));
+    return ret;
+  }, [cards, hoverContent, numActions, playerIndex, results]);
+
+  const summary = useMemo(() => {
+    if (rows.length === 0) return null;
+    let normalizer = 0;
+    const ret = rows[0].map(() => 0);
+    for (const row of rows) {
+      const n = row[2];
+      normalizer += n;
+      ret[1] += row[1];
+      for (let i = 3; i < row.length; ++i) {
+        ret[i] += row[i] * n;
+      }
+    }
+    for (let i = 3; i < ret.length; ++i) {
+      ret[i] /= normalizer;
+    }
+    const eqrBase = results.eqrBase[playerIndex];
+    ret[5] = ret[4] / (eqrBase * ret[3]);
+    if (!isFinite(ret[5])) ret[5] = Number.NaN;
+    return ret;
+  }, [playerIndex, results.eqrBase, rows]);
+
+  const maxWeight = Math.max(0, ...rows.map((row) => row[1]));
+  const exportCsv = () => {
+    const headers = [
+      "Hand",
+      "Weight",
+      "EQ",
+      "EV",
+      "EQR",
+      ...actions
+        .slice(0, numActions)
+        .flatMap((action) => [
+          `${
+            action.amount === "0"
+              ? action.name
+              : `${action.name[0]} ${action.amount}`
+          } %`,
+          `${
+            action.amount === "0"
+              ? action.name
+              : `${action.name[0]} ${action.amount}`
+          } EV`,
+        ]),
+    ];
+    const lines = [
+      headers.join(","),
+      ...rows.map((row) => {
+        const hand = pairText(row[0])
+          .map((card) => `${card.rank}${card.suitLetter}`)
+          .join("");
+        return [
+          hand,
+          row[1],
+          row[3],
+          row[4],
+          row[5],
+          ...actions
+            .slice(0, numActions)
+            .flatMap((_, index) => [
+              row[6 + index * 2],
+              row[6 + index * 2 + 1],
+            ]),
+        ].join(",");
+      }),
+    ];
+    downloadText(`results-${displayPlayer}.csv`, lines.join("\n"));
+  };
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden rounded border border-gray-300 bg-white">
+      <div className="flex items-center justify-between border-b border-gray-300 px-3 py-2 text-sm font-semibold">
+        <span>
+          {displayPlayer.toUpperCase()} hands
+          {hoverContent ? `: ${hoverContent.name}` : ""} ({rows.length})
+        </span>
+        <button
+          className="button-base button-blue !px-2 !py-1"
+          onClick={exportCsv}
+          type="button"
+        >
+          Export CSV
+        </button>
+      </div>
+      <div className="overflow-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead className="sticky top-0 bg-gray-100">
+            <tr>
+              <th className="border-b border-gray-300 px-2 py-1 text-left">
+                Hand
+              </th>
+              <th className="border-b border-gray-300 px-2 py-1 text-right">
+                Weight
+              </th>
+              <th className="border-b border-gray-300 px-2 py-1 text-right">
+                EQ
+              </th>
+              <th className="border-b border-gray-300 px-2 py-1 text-right">
+                EV
+              </th>
+              <th className="border-b border-gray-300 px-2 py-1 text-right">
+                EQR
+              </th>
+              {actions.slice(0, numActions).map((action, index) => (
+                <th
+                  className="border-b border-gray-300 px-2 py-1 text-right"
+                  key={`${action.name}-${action.amount}-${index}`}
+                >
+                  {action.amount === "0"
+                    ? action.name
+                    : `${action.name[0]} ${action.amount}`}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {summary && (
+              <tr className="bg-yellow-50 font-semibold">
+                <td className="border-b border-gray-200 px-2 py-1">Summary</td>
+                <td className="border-b border-gray-200 px-2 py-1 text-right">
+                  {toFixed1(summary[1] * 100)}%
+                </td>
+                <td className="border-b border-gray-200 px-2 py-1 text-right">
+                  {toFixed1(summary[3] * 100)}%
+                </td>
+                <td className="border-b border-gray-200 px-2 py-1 text-right">
+                  {toFixedAdaptive(summary[4])}
+                </td>
+                <td className="border-b border-gray-200 px-2 py-1 text-right">
+                  {toFixed1(summary[5] * 100)}%
+                </td>
+                {actions.slice(0, numActions).map((_, index) => (
+                  <td
+                    className="border-b border-gray-200 px-2 py-1 text-right"
+                    key={index}
+                  >
+                    {toFixed1(summary[6 + index * 2] * 100)}%
+                  </td>
+                ))}
+              </tr>
+            )}
+            {rows.map((row) => {
+              const cards = pairText(row[0]);
+              return (
+                <tr className="hover:bg-blue-50" key={row[0]}>
+                  <td className="border-b border-gray-100 px-2 py-1">
+                    {cards.map((card) => (
+                      <span
+                        className={card.colorClass}
+                        key={card.rank + card.suit}
+                      >
+                        {card.rank}
+                        {card.suit}
+                      </span>
+                    ))}
+                  </td>
+                  <td className="border-b border-gray-100 px-2 py-1 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <span
+                        className="inline-block h-2 bg-yellow-500"
+                        style={{
+                          width:
+                            maxWeight > 0
+                              ? `${(row[1] / maxWeight) * 3}rem`
+                              : 0,
+                        }}
+                      />
+                      {toFixed1(row[1] * 100)}%
+                    </div>
+                  </td>
+                  <td className="border-b border-gray-100 px-2 py-1 text-right">
+                    {toFixed1(row[3] * 100)}%
+                  </td>
+                  <td className="border-b border-gray-100 px-2 py-1 text-right">
+                    {toFixedAdaptive(row[4])}
+                  </td>
+                  <td className="border-b border-gray-100 px-2 py-1 text-right">
+                    {toFixed1(row[5] * 100)}%
+                  </td>
+                  {actions.slice(0, numActions).map((_, index) => (
+                    <td
+                      className="border-b border-gray-100 px-2 py-1 text-right"
+                      key={index}
+                    >
+                      <div>{toFixed1(row[6 + index * 2] * 100)}%</div>
+                      <div className="text-xs text-gray-500">
+                        {toFixed2(row[6 + index * 2 + 1])}
+                      </div>
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ResultMiddle({
+  autoPlayerBasics,
+  autoPlayerChance,
+  chanceMode,
+  displayMode,
+  displayOptions,
+  onDisplayMode,
+  onDisplayOptions,
+}: {
+  autoPlayerBasics: DisplayPlayer;
+  autoPlayerChance: DisplayPlayer;
+  chanceMode: "" | "turn" | "river";
+  displayMode: DisplayMode;
+  displayOptions: DisplayOptions;
+  onDisplayMode: (mode: DisplayMode) => void;
+  onDisplayOptions: (options: DisplayOptions) => void;
+}) {
+  const updateOptions = (patch: Partial<DisplayOptions>) => {
+    const next = { ...displayOptions, ...patch };
+    onDisplayOptions(next);
+    localStorage.setItem("display-options", JSON.stringify(next));
+  };
+
+  const strategyContent = `${displayOptions.strategy},${displayOptions.contentBasics}`;
+  const setStrategyContent = (value: string) => {
+    const [strategy, contentBasics] = value.split(",") as [
+      DisplayOptions["strategy"],
+      DisplayOptions["contentBasics"],
+    ];
+    updateOptions({ strategy, contentBasics });
+  };
+
+  return (
+    <div className="snug flex h-12 shrink-0 border-y border-gray-500 bg-white">
+      {(["basics", "graphs", "compare"] as const).map((mode) => (
+        <button
+          className={[
+            "flex h-full w-[9%] items-center justify-center text-lg font-semibold transition",
+            displayMode === mode
+              ? chanceMode
+                ? "bg-red-100 underline"
+                : "bg-blue-100 underline"
+              : chanceMode
+              ? "hover:bg-red-100"
+              : "hover:bg-blue-100",
+          ].join(" ")}
+          key={mode}
+          onClick={() => onDisplayMode(mode)}
+          type="button"
+        >
+          {mode[0].toUpperCase() + mode.slice(1)}
+        </button>
+      ))}
+      <button
+        className={[
+          "flex h-full w-[9%] items-center justify-center text-lg font-semibold transition enabled:hover:bg-blue-100",
+          displayMode === "chance" ? "bg-blue-100 underline" : "",
+        ].join(" ")}
+        disabled={!chanceMode}
+        onClick={() => onDisplayMode("chance")}
+        type="button"
+      >
+        {chanceMode ? chanceMode[0].toUpperCase() + chanceMode.slice(1) : ""}
+      </button>
+
+      <div className="ml-auto flex h-full shrink-0 items-center gap-2 px-4">
+        {(["basics", "graphs"] as DisplayMode[]).includes(displayMode) && (
+          <label className="flex h-full flex-col justify-center text-sm">
+            <span>Player:</span>
+            <select
+              className="w-28 rounded-lg border-gray-600 bg-gray-200 px-1 py-0.5 shadow"
+              onChange={(event) =>
+                updateOptions({
+                  playerBasics: event.target
+                    .value as DisplayOptions["playerBasics"],
+                })
+              }
+              value={displayOptions.playerBasics}
+            >
+              <option value="auto">
+                Auto ({autoPlayerBasics.toUpperCase()})
+              </option>
+              <option value="oop">OOP</option>
+              <option value="ip">IP</option>
+            </select>
+          </label>
+        )}
+
+        {displayMode === "chance" && (
+          <label className="flex h-full flex-col justify-center text-sm">
+            <span>Player:</span>
+            <select
+              className="w-28 rounded-lg border-gray-600 bg-gray-200 px-1 py-0.5 shadow"
+              onChange={(event) =>
+                updateOptions({
+                  playerChance: event.target
+                    .value as DisplayOptions["playerChance"],
+                })
+              }
+              value={displayOptions.playerChance}
+            >
+              <option value="auto">
+                Auto ({autoPlayerChance.toUpperCase()})
+              </option>
+              <option value="oop">OOP</option>
+              <option value="ip">IP</option>
+            </select>
+          </label>
+        )}
+
+        {(["basics", "compare"] as DisplayMode[]).includes(displayMode) && (
+          <>
+            <label className="flex h-full flex-col justify-center text-sm">
+              <span>Bar Height:</span>
+              <select
+                className="w-28 rounded-lg border-gray-600 bg-gray-200 px-1 py-0.5 shadow"
+                onChange={(event) =>
+                  updateOptions({
+                    barHeight: event.target
+                      .value as DisplayOptions["barHeight"],
+                  })
+                }
+                value={displayOptions.barHeight}
+              >
+                <option value="normalized">Normalized</option>
+                <option value="absolute">Absolute</option>
+                <option value="full">Full</option>
+              </select>
+            </label>
+            <label className="flex h-full flex-col justify-center text-sm">
+              <span>Suit:</span>
+              <select
+                className="w-[6.25rem] rounded-lg border-gray-600 bg-gray-200 px-1 py-0.5 shadow"
+                onChange={(event) =>
+                  updateOptions({
+                    suit: event.target.value as DisplayOptions["suit"],
+                  })
+                }
+                value={displayOptions.suit}
+              >
+                <option value="grouped">Grouped</option>
+                <option value="individual">Individual</option>
+              </select>
+            </label>
+            <label className="flex h-full flex-col justify-center text-sm">
+              <span>Display:</span>
+              <select
+                className="w-[8.75rem] rounded-lg border-gray-600 bg-gray-200 px-1 py-0.5 shadow"
+                onChange={(event) => setStrategyContent(event.target.value)}
+                value={strategyContent}
+              >
+                <option value="show,default">Strategy</option>
+                <option value="show,eq">Strategy + EQ</option>
+                <option value="show,ev">Strategy + EV</option>
+                <option value="show,eqr">Strategy + EQR</option>
+                <option value="none,default">Weight</option>
+                <option value="none,eq">EQ</option>
+                <option value="none,ev">EV</option>
+                <option value="none,eqr">EQR</option>
+              </select>
+            </label>
+          </>
+        )}
+
+        {displayMode === "graphs" && (
+          <label className="flex h-full flex-col justify-center text-sm">
+            <span>Display:</span>
+            <select
+              className="w-20 rounded-lg border-gray-600 bg-gray-200 px-1 py-0.5 shadow"
+              onChange={(event) =>
+                updateOptions({
+                  contentGraphs: event.target
+                    .value as DisplayOptions["contentGraphs"],
+                })
+              }
+              value={displayOptions.contentGraphs}
+            >
+              <option value="eq">EQ</option>
+              <option value="ev">EV</option>
+              <option value="eqr">EQR</option>
+            </select>
+          </label>
+        )}
+
+        {displayMode === "chance" && (
+          <label className="flex h-full flex-col justify-center text-sm">
+            <span>Chart:</span>
+            <select
+              className="w-[10.25rem] rounded-lg border-gray-600 bg-gray-200 px-1 py-0.5 shadow"
+              onChange={(event) =>
+                updateOptions({
+                  chartChance: event.target
+                    .value as DisplayOptions["chartChance"],
+                })
+              }
+              value={displayOptions.chartChance}
+            >
+              <option value="strategy-combos">Strategy (Combos)</option>
+              <option value="strategy">Strategy (%)</option>
+              <option value="eq">Equity</option>
+              <option value="ev">EV</option>
+              <option value="eqr">EQR</option>
+            </select>
+          </label>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ResultSummary({
+  results,
+  selectedChance,
+  selectedSpot,
+}: {
+  results: Results;
+  selectedChance: SpotChance | null;
+  selectedSpot: Spot | null;
+}) {
+  const player =
+    selectedChance || !selectedSpot || selectedSpot.type === "root"
+      ? "chance"
+      : selectedSpot.type === "terminal"
+      ? selectedSpot.prevPlayer
+      : selectedSpot.player;
+  const combos = [0, 1].map((i) =>
+    results.weights[i].reduce(
+      (sum, weight, index) => sum + (results.normalizer[i][index] && weight),
+      0
+    )
+  );
+  const equity = results.isEmpty
+    ? [Number.NaN, Number.NaN]
+    : [
+        average(results.equity[0], results.normalizer[0]),
+        average(results.equity[1], results.normalizer[1]),
+      ];
+  const ev = results.isEmpty
+    ? [Number.NaN, Number.NaN]
+    : [
+        average(results.ev[0], results.normalizer[0]),
+        average(results.ev[1], results.normalizer[1]),
+      ];
+  const eqr = results.isEmpty
+    ? [Number.NaN, Number.NaN]
+    : [
+        ev[0] / (results.eqrBase[0] * equity[0]),
+        ev[1] / (results.eqrBase[1] * equity[1]),
+      ].map((value) => (isFinite(value) ? value : Number.NaN));
+  const rows = [
+    { label: "Combos", values: combos, format: toFixedAdaptive },
+    { label: "Equity", values: equity, format: formatPercent },
+    { label: "EV", values: ev, format: formatEv },
+    { label: "EQR", values: eqr, format: formatPercent },
+  ];
+
+  return (
+    <div className="flex h-full flex-col gap-2.5 px-2 py-1">
+      <div className="flex text-lg font-semibold">
+        <div className="flex items-center">
+          <span>OOP</span>
+          {player === "oop" && <span className="ml-1 text-yellow-500">★</span>}
+        </div>
+        <div className="flex-grow" />
+        <div className="flex items-center">
+          {player === "ip" && <span className="mr-1 text-yellow-500">★</span>}
+          <span>IP</span>
+        </div>
+      </div>
+      {rows.map((row) => (
+        <div className="flex flex-col gap-0.5" key={row.label}>
+          <div className="flex">
+            <div className="w-16">{row.format(row.values[0])}</div>
+            <div className="flex-grow text-center underline">{row.label}</div>
+            <div className="w-16 text-right">{row.format(row.values[1])}</div>
+          </div>
+          <MiniBar values={row.values} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ResultMatrix({
+  cards,
+  currentBoard,
+  displayOptions,
+  displayPlayer,
+  isCompareMode,
+  onHoverContent,
+  results,
+  selectedChance,
+  selectedSpot,
+  totalBetAmount,
+}: {
+  cards: number[][];
+  currentBoard: number[];
+  displayOptions: DisplayOptions;
+  displayPlayer: DisplayPlayer;
+  isCompareMode?: boolean;
+  onHoverContent?: (content: HoverContent | null) => void;
+  results: Results;
+  selectedChance: SpotChance | null;
+  selectedSpot: Spot | null;
+  totalBetAmount: number[];
+}) {
+  const playerIndex = displayPlayer === "oop" ? 0 : 1;
+  const showStrategy =
+    displayOptions.strategy === "show" &&
+    selectedSpot?.type === "player" &&
+    selectedSpot.player === displayPlayer &&
+    !selectedChance &&
+    results.numActions > 0;
+
+  const denominator = useMemo(() => {
+    const ret = Array.from({ length: 169 }, () => 0);
+    for (let card1 = 0; card1 < 52; ++card1) {
+      if (currentBoard.includes(card1)) continue;
+      for (let card2 = card1 + 1; card2 < 52; ++card2) {
+        if (currentBoard.includes(card2)) continue;
+        const { row, col } = cardPairCellIndex(card1, card2);
+        ret[row * 13 + col] += 1;
+      }
+    }
+    return ret;
+  }, [currentBoard]);
+
+  const cellData = useMemo(() => {
+    const data = Array.from({ length: 169 }, () => ({
+      equity: 0,
+      ev: 0,
+      indices: [] as number[],
+      normalizer: 0,
+      strategy: Array.from({ length: results.numActions }, () => 0),
+      weight: 0,
+    }));
+    const playerCards = cards[playerIndex] ?? [];
+
+    for (let i = 0; i < playerCards.length; ++i) {
+      const weight = results.weights[playerIndex][i];
+      const normalizer = results.normalizer[playerIndex][i];
+      if (weight === 0 || normalizer === 0) continue;
+      const pair = playerCards[i];
+      const card1 = pair & 0xff;
+      const card2 = pair >>> 8;
+      const { row, col } = cardPairCellIndex(card1, card2);
+      const target = data[row * 13 + col];
+      target.indices.push(i);
+      target.weight += weight;
+      target.normalizer += normalizer;
+      if (!results.isEmpty) {
+        target.equity += results.equity[playerIndex][i] * normalizer;
+        target.ev += results.ev[playerIndex][i] * normalizer;
+      }
+      if (showStrategy) {
+        for (let action = 0; action < results.numActions; ++action) {
+          target.strategy[action] +=
+            results.strategy[action * playerCards.length + i] * normalizer;
+        }
+      }
+    }
+    return data;
+  }, [cards, playerIndex, results, showStrategy]);
+
+  const maxWeight = Math.max(
+    0,
+    ...cellData.map((cell, index) =>
+      denominator[index] ? cell.weight / denominator[index] : 0
+    )
+  );
+
+  const cellLabel = (index: number) => {
+    const row = Math.floor(index / 13);
+    const col = index % 13;
+    const r1 = 12 - Math.min(row, col);
+    const r2 = 12 - Math.max(row, col);
+    return ranks[r1] + ranks[r2] + ["s", "", "o"][Math.sign(row - col) + 1];
+  };
+
+  const cellValue = (index: number) => {
+    const cell = cellData[index];
+    if (cell.weight === 0) return "";
+    if (showStrategy && displayOptions.contentBasics === "default") return "";
+    if (displayOptions.contentBasics === "eq") {
+      if (results.isEmpty) return "-";
+      return toFixed1((cell.equity / cell.normalizer) * 100);
+    }
+    if (displayOptions.contentBasics === "ev") {
+      if (results.isEmpty) return "-";
+      return toFixedAdaptive(cell.ev / cell.normalizer);
+    }
+    if (displayOptions.contentBasics === "eqr") {
+      if (results.isEmpty) return "-";
+      const eqr = cell.ev / (results.eqrBase[playerIndex] * cell.equity);
+      return isFinite(eqr) ? toFixed1(eqr * 100) : "-";
+    }
+    return toFixed1((cell.weight / denominator[index]) * 100);
+  };
+
+  const cellBackground = (index: number) => {
+    const cell = cellData[index];
+    if (cell.weight === 0) return {};
+    const denom = denominator[index] || 1;
+    const ratio = cell.weight / denom;
+    const height =
+      displayOptions.barHeight === "full"
+        ? 1
+        : displayOptions.barHeight === "absolute"
+        ? ratio
+        : maxWeight > 0
+        ? ratio / maxWeight
+        : 0;
+
+    if (showStrategy && selectedSpot?.type === "player") {
+      let pos = 0;
+      const stops = selectedSpot.actions.map((action, actionIndex) => {
+        const next = pos + cell.strategy[actionIndex] / cell.normalizer;
+        const stop = `${action.color} ${pos * 100}% ${next * 100}%`;
+        pos = next;
+        return stop;
+      });
+      return {
+        backgroundImage: `linear-gradient(to right, ${stops.join(", ")})`,
+        backgroundSize: `100% ${height * 100}%`,
+      };
+    }
+
+    let color = yellow500;
+    if (!results.isEmpty && displayOptions.contentBasics !== "default") {
+      if (displayOptions.contentBasics === "eq") {
+        color = resultColor(cell.equity / cell.normalizer, 0, 0.5, 1);
+      } else if (displayOptions.contentBasics === "ev") {
+        const amountSum =
+          Math.min(...totalBetAmount) + totalBetAmount[playerIndex];
+        const pot =
+          amountSum + Math.max(1, totalBetAmount[0] + totalBetAmount[1]);
+        color = resultColor(cell.ev / cell.normalizer, 0, pot / 2, pot);
+      } else {
+        const eqr = cell.ev / (results.eqrBase[playerIndex] * cell.equity);
+        color = resultColor(eqr, 0, 1, 2);
+      }
+    }
+    return {
+      backgroundImage: `linear-gradient(${color} 0% 100%)`,
+      backgroundSize: `100% ${height * 100}%`,
+    };
+  };
+
+  return (
+    <div className="h-full w-full">
+      <table
+        className="snug h-full w-full table-fixed select-none"
+        onMouseLeave={() => !isCompareMode && onHoverContent?.(null)}
+      >
+        <tbody>
+          {Array.from({ length: 13 }, (_, row) => (
+            <tr key={row}>
+              {Array.from({ length: 13 }, (_, col) => {
+                const index = row * 13 + col;
+                const cell = cellData[index];
+                const hasWeight = cell.weight > 0;
+                const bg = cellBackground(index);
+                return (
+                  <td
+                    className="relative border border-black"
+                    key={index}
+                    onMouseEnter={() =>
+                      !isCompareMode &&
+                      onHoverContent?.(
+                        hasWeight
+                          ? { name: cellLabel(index), indices: cell.indices }
+                          : null
+                      )
+                    }
+                  >
+                    <div
+                      className={[
+                        "absolute left-0 top-0 flex h-full w-full bg-left-bottom bg-no-repeat",
+                        row === col ? "bg-neutral-700" : "bg-neutral-800",
+                      ].join(" ")}
+                      style={bg}
+                    />
+                    <div
+                      className={[
+                        "absolute -top-px left-[0.1875rem] z-10 text-shadow",
+                        hasWeight ? "text-white" : "text-neutral-500",
+                      ].join(" ")}
+                      style={{ fontSize: "max(0.95rem, min(1.3vw, 2.1vh))" }}
+                    >
+                      {cellLabel(index)}
+                    </div>
+                    <div
+                      className="absolute bottom-px right-1 z-10 max-w-[calc(100%-0.25rem)] overflow-hidden text-shadow text-white"
+                      style={{ fontSize: "max(0.8rem, min(1.05vw, 1.8vh))" }}
+                    >
+                      {cellValue(index)}
+                    </div>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ResultGraphs({
+  cards,
+  displayOptions,
+  displayPlayer,
+  results,
+}: {
+  cards: number[][];
+  displayOptions: DisplayOptions;
+  displayPlayer: DisplayPlayer;
+  results: Results;
+}) {
+  const chartData = useMemo(() => {
+    if (results.isEmpty) return { datasets: [] };
+    const content = displayOptions.contentGraphs;
+    const datasets = [0, 1].map((playerIndex) => {
+      const playerCards = cards[playerIndex] ?? [];
+      const values =
+        content === "eq"
+          ? results.equity[playerIndex]
+          : content === "ev"
+          ? results.ev[playerIndex]
+          : results.eqr[playerIndex].map((value) =>
+              isFinite(value) ? value : Number.NaN
+            );
+      const tuples = playerCards
+        .map((pair, index) => ({
+          pair,
+          value: values[index],
+          weight: results.normalizer[playerIndex][index],
+        }))
+        .filter(
+          (_, index) =>
+            results.weights[playerIndex][index] > 0 &&
+            results.normalizer[playerIndex][index] > 0
+        )
+        .sort((a, b) =>
+          !Number.isNaN(a.value) && !Number.isNaN(b.value)
+            ? a.value - b.value || cardPairOrder(a.pair) - cardPairOrder(b.pair)
+            : Number.isNaN(a.value)
+            ? 1
+            : -1
+        );
+      const total = tuples.reduce((sum, tuple) => sum + tuple.weight, 0) || 1;
+      let x = 0;
+      const data = tuples.map((tuple) => {
+        x += tuple.weight / total;
+        return { x, y: tuple.value };
+      });
+      return {
+        backgroundColor: playerIndex === 0 ? sky500 : lime500,
+        borderColor: playerIndex === 0 ? sky500 : lime500,
+        borderWidth:
+          displayPlayer === (playerIndex === 0 ? "oop" : "ip") ? 4 : 2,
+        data,
+        label: `${playerIndex === 0 ? "OOP" : "IP"} ${
+          content === "eq" ? "Equity" : content.toUpperCase()
+        }`,
+        pointRadius: 0,
+        stepped: "middle" as const,
+      };
+    });
+    return { datasets };
+  }, [cards, displayOptions.contentGraphs, displayPlayer, results]);
+
+  return (
+    <div className="flex h-full min-h-0 gap-3">
+      <div className="min-w-0 flex-[4] p-4">
+        {results.isEmpty ? (
+          <div className="flex h-full items-center justify-center">
+            Graphs not available
+          </div>
+        ) : (
+          <Line
+            data={chartData}
+            options={{
+              animation: false,
+              maintainAspectRatio: false,
+              parsing: false,
+              responsive: true,
+              scales: {
+                x: {
+                  max: 1,
+                  min: 0,
+                  ticks: { format: { style: "percent" } },
+                  type: "linear",
+                },
+                y: {
+                  max: displayOptions.contentGraphs === "eq" ? 1 : undefined,
+                  min: displayOptions.contentGraphs === "eq" ? 0 : undefined,
+                  ticks: {
+                    format: {
+                      style:
+                        displayOptions.contentGraphs === "ev"
+                          ? "decimal"
+                          : "percent",
+                    },
+                  },
+                },
+              },
+            }}
+          />
+        )}
+      </div>
+      <div className="min-w-0 flex-[3]">
+        <ResultTable
+          cards={cards}
+          displayPlayer={displayPlayer}
+          results={results}
+          selectedSpot={null}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ResultChance({
+  chanceReports,
+  displayOptions,
+  displayPlayer,
+  onDealCard,
+  selectedChance,
+  selectedSpot,
+}: {
+  chanceReports: ChanceReports | null;
+  displayOptions: DisplayOptions;
+  displayPlayer: DisplayPlayer;
+  onDealCard: (card: number) => void;
+  selectedChance: SpotChance;
+  selectedSpot: Spot | null;
+}) {
+  const chartData = useMemo(() => {
+    if (!chanceReports) return null;
+    const option = displayOptions.chartChance;
+    const playerIndex = displayPlayer === "oop" ? 0 : 1;
+    const labels = [...ranks].reverse();
+    let datasets;
+
+    if (option === "strategy-combos" || option === "strategy") {
+      const isCombos = option === "strategy-combos";
+      if (
+        chanceReports.currentPlayer === displayPlayer &&
+        selectedSpot?.type === "player"
+      ) {
+        datasets = Array.from(
+          { length: chanceReports.numActions * 4 },
+          (_, i) => {
+            const actionIndex = i >> 2;
+            const suit = i & 3;
+            const action = selectedSpot.actions[actionIndex];
+            return {
+              backgroundColor: action.color,
+              data: Array.from({ length: 13 }, (_, rank) => {
+                const card = cardId(rank, suit);
+                if (chanceReports.status[card] === 0) return 0;
+                const coef = isCombos
+                  ? chanceReports.combos[playerIndex][card]
+                  : 1;
+                return coef * chanceReports.strategy[actionIndex * 52 + card];
+              }).reverse(),
+              label:
+                action.amount === "0"
+                  ? action.name
+                  : `${action.name} ${action.amount}`,
+              stack: chanceSuitStacks[suit],
+            };
+          }
+        ).reverse();
+      } else {
+        datasets = Array.from({ length: 4 }, (_, suit) => ({
+          backgroundColor: chanceSuitColors[suit],
+          data: Array.from({ length: 13 }, (_, rank) => {
+            const card = cardId(rank, suit);
+            if (chanceReports.status[card] === 0) return 0;
+            return isCombos ? chanceReports.combos[playerIndex][card] : 1;
+          }).reverse(),
+          label: ["Clubs", "Diamonds", "Hearts", "Spades"][suit],
+          stack: chanceSuitStacks[suit],
+        })).reverse();
+      }
+    } else {
+      const data =
+        option === "eq"
+          ? chanceReports.equity[playerIndex]
+          : option === "ev"
+          ? chanceReports.ev[playerIndex]
+          : chanceReports.eqr[playerIndex];
+      datasets = Array.from({ length: 4 }, (_, suit) => ({
+        backgroundColor: chanceSuitColors[suit],
+        data: Array.from(
+          { length: 13 },
+          (_, rank) => data[4 * rank + suit]
+        ).reverse(),
+        label: ["Clubs", "Diamonds", "Hearts", "Spades"][suit],
+        stack: chanceSuitStacks[suit],
+      })).reverse();
+    }
+
+    return { labels, datasets };
+  }, [chanceReports, displayOptions.chartChance, displayPlayer, selectedSpot]);
+
+  return (
+    <div className="flex h-full min-h-0">
+      <div className="flex flex-[4] flex-col items-center gap-[1%] pt-[1%]">
+        {Array.from({ length: 4 }, (_, suit) => (
+          <div
+            className="flex w-full shrink-0 justify-center gap-[1%]"
+            key={suit}
+          >
+            {Array.from({ length: 13 }, (_, rank) => {
+              const card = 56 - 4 * (rank + 1) - (suit + 1);
+              return (
+                <BoardCard
+                  cardId={card}
+                  className={[
+                    "w-[5.5%]",
+                    selectedChance.cards[card]?.isDead
+                      ? "cursor-default opacity-40 brightness-75"
+                      : "",
+                  ].join(" ")}
+                  isSelected={selectedChance.selectedIndex === card}
+                  key={card}
+                  onClick={() =>
+                    !selectedChance.cards[card]?.isDead && onDealCard(card)
+                  }
+                />
+              );
+            })}
+          </div>
+        ))}
+        <div className="min-h-0 w-[84.5%] flex-grow py-3">
+          {chartData ? (
+            <Bar
+              data={chartData}
+              options={{
+                animation: false,
+                maintainAspectRatio: false,
+                responsive: true,
+                scales: {
+                  x: { stacked: true },
+                  y: {
+                    max:
+                      displayOptions.chartChance === "strategy" ? 1 : undefined,
+                    min: ["ev", "eqr"].includes(displayOptions.chartChance)
+                      ? undefined
+                      : 0,
+                    stacked: true,
+                    ticks: {
+                      format: {
+                        style: ["strategy", "eq", "eqr"].includes(
+                          displayOptions.chartChance
+                        )
+                          ? "percent"
+                          : "decimal",
+                      },
+                    },
+                  },
+                },
+                plugins: { legend: { display: false } },
+              }}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-gray-500">
+              Chance reports unavailable
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="min-w-0 flex-[3] border-l border-gray-500 p-3">
+        <div className="text-lg font-semibold">Chance Summary</div>
+        <div className="mt-2 text-sm text-gray-600">
+          {selectedChance.player.toUpperCase()} card, display{" "}
+          {displayPlayer.toUpperCase()}
+        </div>
+        {chanceReports && (
+          <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+            <div>Available cards</div>
+            <div className="text-right">
+              {chanceReports.status.filter(Boolean).length}
+            </div>
+            <div>Current player</div>
+            <div className="text-right">{chanceReports.currentPlayer}</div>
+            <div>Actions</div>
+            <div className="text-right">{chanceReports.numActions}</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ResultNavigator({
+  cards,
+  dealRequest,
+  onDealHandled,
+  onUpdate,
+}: {
+  cards: number[][];
+  dealRequest: number | null;
+  onDealHandled: () => void;
+  onUpdate: (result: Omit<LoadedResults, "cards">) => void;
+}) {
+  const config = useAppSelector((state) => state.config);
+  const navRef = useRef<HTMLDivElement | null>(null);
+  const spotsRef = useRef<Spot[]>([]);
+  const selectedSpotIndexRef = useRef(-1);
+  const selectedChanceIndexRef = useRef(-1);
+  const lockedRef = useRef(false);
+  const resultsRef = useRef<Results | null>(null);
+  const chanceReportsRef = useRef<ChanceReports | null>(null);
+  const totalBetAmountRef = useRef([0, 0]);
+  const totalBetAmountAppendedRef = useRef([0, 0]);
+
+  const [spots, setSpots] = useState<Spot[]>([]);
+  const [selectedSpotIndex, setSelectedSpotIndex] = useState(-1);
+  const [selectedChanceIndex, setSelectedChanceIndex] = useState(-1);
+  const [rates, setRates] = useState<number[] | null>(null);
+
+  const setSpotsValue = (nextSpots: Spot[]) => {
+    spotsRef.current = nextSpots;
+    setSpots([...nextSpots]);
+  };
+
+  const isSelectedChanceSkipped = () =>
+    selectedChanceIndexRef.current !== -1 &&
+    (spotsRef.current[selectedChanceIndexRef.current] as SpotChance)
+      ?.selectedIndex === -1;
+
+  const currentBoardFromRefs = () => {
+    const board = [...config.board];
+    const endIndex =
+      selectedChanceIndexRef.current === -1
+        ? selectedSpotIndexRef.current
+        : selectedChanceIndexRef.current;
+    for (let i = 3; i < endIndex; ++i) {
+      const spot = spotsRef.current[i];
+      if (spot.type === "chance") {
+        const card = spot.selectedIndex;
+        if (card !== -1) board.push(card);
+        else return board;
+      }
+    }
+    return board;
+  };
+
+  const spliceSpotsTerminal = (spotIndex: number) => {
+    const results = resultsRef.current;
+    if (!results) throw new Error("null results");
+    const prevSpot = spotsRef.current[spotIndex - 1] as SpotPlayer;
+    const prevAction = prevSpot.actions[prevSpot.selectedIndex];
+    const chanceIndex = selectedChanceIndexRef.current;
+    const chanceSkipped =
+      chanceIndex !== -1 &&
+      (spotsRef.current[chanceIndex] as SpotChance).selectedIndex === -1;
+
+    let equityOop;
+    if (prevAction.name === "Fold") {
+      equityOop = prevSpot.player === "oop" ? 0 : 1;
+    } else if (chanceSkipped || results.isEmpty) {
+      equityOop = -1;
+    } else {
+      equityOop = average(results.equity[0], results.normalizer[0]);
+    }
+
+    const betSum =
+      totalBetAmountAppendedRef.current[0] +
+      totalBetAmountAppendedRef.current[1];
+    setSpotsValue([
+      ...spotsRef.current.slice(0, spotIndex),
+      {
+        type: "terminal",
+        index: spotIndex,
+        player: "end",
+        selectedIndex: -1,
+        prevPlayer: prevSpot.player,
+        equityOop,
+        pot: config.startingPot + betSum,
+      },
+    ]);
+  };
+
+  const spliceSpotsPlayer = (spotIndex: number, actions: string[]) => {
+    const prevSpot = spotsRef.current[spotIndex - 1];
+    const player = prevSpot.player === "oop" ? "ip" : "oop";
+    let numBetActions = actions.length;
+    if (actions[0]?.split(":")[1] === "0") numBetActions -= 1;
+    if (actions[1]?.split(":")[1] === "0") numBetActions -= 1;
+
+    setSpotsValue([
+      ...spotsRef.current.slice(0, spotIndex),
+      {
+        type: "player",
+        index: spotIndex,
+        player,
+        selectedIndex: -1,
+        actions: actions.map((action, i) => {
+          const [name, amount] = action.split(":");
+          return {
+            index: i,
+            name,
+            amount,
+            isSelected: false,
+            color: actionColor(name, i, actions.length, numBetActions),
+          };
+        }),
+      },
+    ]);
+  };
+
+  const spliceSpotsChance = async (spotIndex: number) => {
+    type SpotTurn = SpotRoot | SpotChance;
+    const prevSpot = spotsRef.current[spotIndex - 1] as SpotPlayer;
+    const turnSpot = spotsRef.current
+      .slice(0, spotIndex)
+      .find((spot) => spot.player === "turn") as SpotTurn | undefined;
+
+    let append: number[] = [];
+    if (selectedChanceIndexRef.current !== -1) {
+      append = spotsRef.current
+        .slice(selectedChanceIndexRef.current, spotIndex)
+        .map((spot) => spot.selectedIndex);
+    }
+
+    let possibleCards = 0n;
+    if (!(turnSpot?.type === "chance" && turnSpot.selectedIndex === -1)) {
+      possibleCards = await invokes.gamePossibleCards();
+    }
+
+    append.push(-1);
+    const nextActions = await invokes.gameActionsAfter(append);
+    let numBetActions = nextActions.length;
+    while (
+      numBetActions > 0 &&
+      nextActions[nextActions.length - numBetActions].split(":")[1] === "0"
+    ) {
+      numBetActions -= 1;
+    }
+
+    if (selectedChanceIndexRef.current === -1) {
+      chanceReportsRef.current = await invokes.gameGetChanceReports(
+        append,
+        "oop",
+        nextActions.length
+      );
+    }
+
+    setSpotsValue([
+      ...spotsRef.current.slice(0, spotIndex),
+      {
+        type: "chance",
+        index: spotIndex,
+        player: turnSpot ? "river" : "turn",
+        selectedIndex: -1,
+        prevPlayer: prevSpot.player,
+        cards: Array.from({ length: 52 }, (_, i) => ({
+          card: i,
+          isSelected: false,
+          isDead: !(possibleCards & (1n << BigInt(i))),
+        })),
+        pot: config.startingPot + 2 * totalBetAmountAppendedRef.current[0],
+        stack: config.effectiveStack - totalBetAmountAppendedRef.current[0],
+      },
+      {
+        type: "player",
+        index: spotIndex + 1,
+        player: "oop",
+        selectedIndex: -1,
+        actions: nextActions.map((action, i) => {
+          const [name, amount] = action.split(":");
+          return {
+            index: i,
+            name,
+            amount,
+            isSelected: false,
+            color: actionColor(name, i, nextActions.length, numBetActions),
+          };
+        }),
+      },
+    ]);
+    selectedSpotIndexRef.current += 1;
+    setSelectedSpotIndex(selectedSpotIndexRef.current);
+    if (selectedChanceIndexRef.current === -1) {
+      selectedChanceIndexRef.current = spotIndex;
+      setSelectedChanceIndex(spotIndex);
+    }
+  };
+
+  const emitUpdate = () => {
+    const results = resultsRef.current;
+    if (!results) return;
+    onUpdate({
+      chanceReports: chanceReportsRef.current,
+      currentBoard: currentBoardFromRefs(),
+      results,
+      selectedChance:
+        selectedChanceIndexRef.current === -1
+          ? null
+          : (spotsRef.current[selectedChanceIndexRef.current] as SpotChance),
+      selectedSpot:
+        selectedSpotIndexRef.current === -1
+          ? null
+          : spotsRef.current[selectedSpotIndexRef.current],
+      totalBetAmount: totalBetAmountRef.current,
+    });
+  };
+
+  const selectSpot = async (
+    spotIndex: number,
+    needSplice: boolean,
+    fromDeal = false
+  ) => {
+    if (
+      lockedRef.current ||
+      (!needSplice &&
+        ((spotIndex === selectedSpotIndexRef.current && !fromDeal) ||
+          spotIndex === selectedChanceIndexRef.current ||
+          (spotsRef.current[spotIndex]?.type === "chance" &&
+            isSelectedChanceSkipped() &&
+            spotIndex > selectedChanceIndexRef.current)))
+    ) {
+      return;
+    }
+
+    if (spotIndex === 0) {
+      await selectSpot(1, true);
+      return;
+    }
+
+    lockedRef.current = true;
+
+    if (fromDeal) {
+      const nextSpots = [...spotsRef.current];
+      const riverOffset = nextSpots
+        .slice(selectedChanceIndexRef.current + 3)
+        .findIndex((spot) => spot.type === "chance");
+      const riverIndex =
+        riverOffset === -1
+          ? -1
+          : riverOffset + selectedChanceIndexRef.current + 3;
+
+      selectedChanceIndexRef.current = -1;
+
+      if (riverIndex !== -1) {
+        const riverSpot = nextSpots[riverIndex] as SpotChance;
+        await invokes.gameApplyHistory(
+          nextSpots.slice(1, riverIndex).map((spot) => spot.selectedIndex)
+        );
+        const possibleCards = await invokes.gamePossibleCards();
+        let selectedIndex = riverSpot.selectedIndex;
+        const cards = riverSpot.cards.map((item) => {
+          const isDead = !(possibleCards & (1n << BigInt(item.card)));
+          if (item.card === selectedIndex && isDead) selectedIndex = -1;
+          return {
+            ...item,
+            isDead,
+            isSelected: item.card === selectedIndex,
+          };
+        });
+        nextSpots[riverIndex] = { ...riverSpot, cards, selectedIndex };
+      }
+
+      const riverSpot =
+        riverIndex === -1 ? null : (nextSpots[riverIndex] as SpotChance);
+      const riverSkipped = riverSpot?.selectedIndex === -1;
+      const lastIndex = nextSpots.length - 1;
+      const lastSpot = nextSpots[lastIndex];
+      if (
+        !riverSkipped &&
+        lastSpot?.type === "terminal" &&
+        lastSpot.equityOop !== 0 &&
+        lastSpot.equityOop !== 1
+      ) {
+        await invokes.gameApplyHistory(
+          nextSpots.slice(1, -1).map((spot) => spot.selectedIndex)
+        );
+        const terminalResults = await invokes.gameGetResults();
+        nextSpots[lastIndex] = {
+          ...lastSpot,
+          equityOop: terminalResults.isEmpty
+            ? -1
+            : average(terminalResults.equity[0], terminalResults.normalizer[0]),
+        };
+      }
+
+      setSpotsValue(nextSpots);
+    }
+
+    if (!needSplice && spotsRef.current[spotIndex].type === "chance") {
+      selectedChanceIndexRef.current = spotIndex;
+      if (selectedSpotIndexRef.current < spotIndex + 1) {
+        selectedSpotIndexRef.current = spotIndex + 1;
+      }
+    } else {
+      selectedSpotIndexRef.current = spotIndex;
+      if (spotIndex <= selectedChanceIndexRef.current) {
+        selectedChanceIndexRef.current = -1;
+      } else if (selectedChanceIndexRef.current === -1) {
+        selectedChanceIndexRef.current = spotsRef.current
+          .slice(0, spotIndex)
+          .findIndex(
+            (spot) => spot.type === "chance" && spot.selectedIndex === -1
+          );
+      }
+    }
+
+    const endIndex =
+      selectedChanceIndexRef.current === -1
+        ? selectedSpotIndexRef.current
+        : selectedChanceIndexRef.current;
+    const history = spotsRef.current
+      .slice(1, endIndex)
+      .map((spot) => spot.selectedIndex);
+
+    await invokes.gameApplyHistory(history);
+    resultsRef.current = await invokes.gameGetResults();
+
+    let append: number[] = [];
+    if (selectedChanceIndexRef.current !== -1) {
+      append = spotsRef.current
+        .slice(selectedChanceIndexRef.current, selectedSpotIndexRef.current)
+        .map((spot) => spot.selectedIndex);
+    }
+
+    const nextActions = await invokes.gameActionsAfter(append);
+    const canChanceReports =
+      selectedChanceIndexRef.current !== -1 &&
+      spotsRef.current
+        .slice(selectedChanceIndexRef.current + 3, selectedSpotIndexRef.current)
+        .every((spot) => spot.type !== "chance") &&
+      nextActions[0] !== "chance";
+
+    if (canChanceReports) {
+      const player =
+        nextActions[0] === "terminal"
+          ? "terminal"
+          : append.length % 2 === 1
+          ? "oop"
+          : "ip";
+      const numActions = nextActions[0] === "terminal" ? 0 : nextActions.length;
+      chanceReportsRef.current = await invokes.gameGetChanceReports(
+        append,
+        player,
+        numActions
+      );
+    } else {
+      chanceReportsRef.current = null;
+    }
+    totalBetAmountRef.current = await invokes.gameTotalBetAmount([]);
+    totalBetAmountAppendedRef.current =
+      await invokes.gameTotalBetAmount(append);
+
+    if (needSplice) {
+      if (nextActions[0] === "terminal") {
+        spliceSpotsTerminal(spotIndex);
+      } else if (nextActions[0] === "chance") {
+        await spliceSpotsChance(spotIndex);
+      } else {
+        spliceSpotsPlayer(spotIndex, nextActions);
+      }
+    }
+
+    const spot = spotsRef.current[selectedSpotIndexRef.current];
+    if (
+      spot?.type === "player" &&
+      selectedChanceIndexRef.current === -1 &&
+      resultsRef.current
+    ) {
+      const playerIndex = spot.player === "oop" ? 0 : 1;
+      if (resultsRef.current.isEmpty & (1 << playerIndex)) {
+        setRates(null);
+      } else {
+        const n = cards[playerIndex].length;
+        setRates(
+          Array.from({ length: spot.actions.length }, (_, i) => {
+            const strategy = resultsRef.current!.strategy.slice(
+              i * n,
+              (i + 1) * n
+            );
+            return average(
+              strategy,
+              resultsRef.current!.normalizer[playerIndex]
+            );
+          })
+        );
+      }
+    } else {
+      setRates(null);
+    }
+
+    setSelectedSpotIndex(selectedSpotIndexRef.current);
+    setSelectedChanceIndex(selectedChanceIndexRef.current);
+    lockedRef.current = false;
+    emitUpdate();
+
+    window.requestAnimationFrame(() => {
+      const selectedChild =
+        navRef.current?.children[selectedSpotIndexRef.current];
+      selectedChild?.scrollIntoView({ behavior: "smooth", inline: "center" });
+    });
+  };
+
+  const play = async (spotIndex: number, actionIndex: number) => {
+    const nextSpots = [...spotsRef.current];
+    const spot = { ...(nextSpots[spotIndex] as SpotPlayer) };
+    spot.actions = spot.actions.map((action, index) => ({
+      ...action,
+      isSelected: index === actionIndex,
+    }));
+    spot.selectedIndex = actionIndex;
+    nextSpots[spotIndex] = spot;
+    setSpotsValue(nextSpots);
+    await selectSpot(spotIndex + 1, true);
+  };
+
+  const deal = async (spotIndex: number, card: number) => {
+    const nextSpots = [...spotsRef.current];
+    const spot = { ...(nextSpots[spotIndex] as SpotChance) };
+    spot.cards = spot.cards.map((item) => ({
+      ...item,
+      isSelected: item.card === card,
+    }));
+    spot.selectedIndex = card;
+    nextSpots[spotIndex] = spot;
+    setSpotsValue(nextSpots);
+    await selectSpot(selectedSpotIndexRef.current, false, true);
+  };
+
+  useEffect(() => {
+    if (dealRequest === null) return;
+    const selectedChanceIndex = selectedChanceIndexRef.current;
+    if (selectedChanceIndex === -1) {
+      onDealHandled();
+      return;
+    }
+    deal(selectedChanceIndex, dealRequest).finally(onDealHandled);
+    // Deal requests intentionally call the current navigator state machine.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dealRequest]);
+
+  useEffect(() => {
+    const init = async () => {
+      const l = config.board.length;
+      const spot: SpotRoot = {
+        type: "root",
+        index: 0,
+        player: l === 3 ? "flop" : l === 4 ? "turn" : "river",
+        selectedIndex: -1,
+        board: config.board,
+        pot: config.startingPot,
+        stack: config.effectiveStack,
+      };
+      setSpotsValue([spot]);
+      selectedSpotIndexRef.current = -1;
+      selectedChanceIndexRef.current = -1;
+      await selectSpot(1, true);
+    };
+    init();
+    // Result navigation intentionally initializes from the current solved game.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const spotCards = (spot: SpotRoot | SpotChance) => {
+    if (spot.type === "root") return spot.board.map((card) => cardText(card));
+    if (spot.selectedIndex === -1) {
+      return [{ rank: "?", suit: "", colorClass: "text-black" }];
+    }
+    return [cardText(spot.selectedIndex)];
+  };
+
+  return (
+    <div
+      className="snug flex h-[10.5rem] gap-1 overflow-x-auto whitespace-nowrap p-1"
+      ref={navRef}
+    >
+      {spots.map((spot) => (
+        <div
+          className={[
+            "group flex h-full min-w-[5.25rem] flex-col justify-start rounded-lg border-[3px] px-1 py-0.5 shadow-md transition",
+            spot.type === "chance"
+              ? "hover:border-red-600"
+              : "hover:border-blue-600",
+            spot.index === selectedSpotIndex
+              ? "cursor-default border-blue-600"
+              : "cursor-pointer border-gray-400",
+          ].join(" ")}
+          key={spot.index}
+          onClick={() => selectSpot(spot.index, false)}
+        >
+          {(spot.type === "root" || spot.type === "chance") && (
+            <>
+              <div className="px-1.5 pb-0.5 pt-1 font-semibold opacity-70 group-hover:opacity-100">
+                {spot.player.toUpperCase()}
+              </div>
+              <div className="flex flex-grow flex-col items-center justify-evenly px-3 font-semibold">
+                {spotCards(spot).map((card) => (
+                  <span className={card.colorClass} key={card.rank + card.suit}>
+                    {card.rank}
+                    {card.suit}
+                  </span>
+                ))}
+                {spot.type === "chance" &&
+                  spot.index === selectedChanceIndex && (
+                    <div className="grid grid-cols-4 gap-1 text-xs">
+                      {spot.cards
+                        .filter((card) => !card.isDead)
+                        .slice(0, 12)
+                        .map((card) => {
+                          const text = cardText(card.card);
+                          return (
+                            <button
+                              className={[
+                                "rounded px-1",
+                                card.isSelected
+                                  ? "bg-blue-100"
+                                  : "hover:bg-gray-100",
+                                text.colorClass,
+                              ].join(" ")}
+                              key={card.card}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                deal(spot.index, card.card);
+                              }}
+                              type="button"
+                            >
+                              {text.rank}
+                              {text.suit}
+                            </button>
+                          );
+                        })}
+                    </div>
+                  )}
+              </div>
+            </>
+          )}
+
+          {spot.type === "player" && (
+            <>
+              <div
+                className={[
+                  "px-1.5 py-1 font-semibold group-hover:opacity-100",
+                  spot.index === selectedSpotIndex ? "" : "opacity-70",
+                ].join(" ")}
+              >
+                {spot.player.toUpperCase()}
+              </div>
+              <div className="flex-grow overflow-y-auto">
+                {spot.actions.map((action) => (
+                  <button
+                    className={[
+                      "flex w-full rounded-md px-1.5 transition-colors hover:bg-blue-100",
+                      action.isSelected ? "bg-blue-100" : "",
+                    ].join(" ")}
+                    key={action.index}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      play(spot.index, action.index);
+                    }}
+                    type="button"
+                  >
+                    <span className="relative mr-0.5 inline-block w-4">
+                      {action.isSelected && (
+                        <CheckIcon className="absolute -left-0.5 top-[0.1875rem] h-4 w-4" />
+                      )}
+                    </span>
+                    <span
+                      className={[
+                        "pr-0.5 font-semibold group-hover:opacity-100",
+                        action.isSelected || spot.index === selectedSpotIndex
+                          ? ""
+                          : "opacity-70",
+                      ].join(" ")}
+                    >
+                      {action.name} {action.amount === "0" ? "" : action.amount}
+                    </span>
+                    {rates && spot.index === selectedSpotIndex && (
+                      <span className="ml-auto text-xs text-gray-500">
+                        {toFixed1((rates[action.index] ?? 0) * 100)}%
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {spot.type === "terminal" && (
+            <>
+              <div
+                className={[
+                  "px-1.5 pb-0.5 pt-1 font-semibold group-hover:opacity-100",
+                  spot.index === selectedSpotIndex ? "" : "opacity-70",
+                ].join(" ")}
+              >
+                END
+              </div>
+              <div className="flex flex-grow flex-col items-center justify-evenly font-semibold">
+                {(spot.equityOop === 0 || spot.equityOop === 1) && (
+                  <div className="px-3">
+                    {["IP", "OOP"][spot.equityOop]} Wins
+                  </div>
+                )}
+                <div className="px-3">Pot {spot.pot}</div>
+              </div>
+            </>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function ResultViewer() {
+  const isSolverFinished = useAppSelector(
+    (state) => state.app.isSolverFinished
+  );
+  const [loaded, setLoaded] = useState<LoadedResults | null>(null);
+  const [displayMode, setDisplayMode] = useState<DisplayMode>("basics");
+  const [displayOptions, setDisplayOptions] =
+    useState<DisplayOptions>(loadDisplayOptions);
+  const [hoverContent, setHoverContent] = useState<HoverContent | null>(null);
+  const [dealRequest, setDealRequest] = useState<number | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!isSolverFinished) {
+      setLoaded(null);
+      return;
+    }
+
+    let cancelled = false;
+    const load = async () => {
+      try {
+        await invokes.gameApplyHistory([]);
+        const [cards, results, totalBetAmount] = await Promise.all([
+          invokes.gamePrivateCards(),
+          invokes.gameGetResults(),
+          invokes.gameTotalBetAmount([]),
+        ]);
+        if (!cancelled) {
+          setLoaded({
+            cards,
+            chanceReports: null,
+            currentBoard: [],
+            results,
+            selectedChance: null,
+            selectedSpot: null,
+            totalBetAmount,
+          });
+          setError("");
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [isSolverFinished]);
+
+  if (!isSolverFinished) {
+    return (
+      <div className="flex h-full items-center justify-center font-semibold text-gray-500">
+        Results will be available after the solver finishes.
+      </div>
+    );
+  }
+
+  if (error) {
+    return <div className="p-6 font-semibold text-red-500">Error: {error}</div>;
+  }
+
+  if (!loaded) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <span className="spinner mr-3 inline-block" />
+        Loading results...
+      </div>
+    );
+  }
+
+  const selectedSpot = loaded.selectedSpot;
+  const selectedChance = loaded.selectedChance;
+  const chanceMode = selectedChance?.player ?? "";
+  const autoPlayerBasics: DisplayPlayer = selectedChance
+    ? selectedChance.prevPlayer
+    : selectedSpot?.type === "terminal"
+    ? selectedSpot.prevPlayer
+    : selectedSpot?.type === "player"
+    ? selectedSpot.player
+    : "oop";
+  const autoPlayerChance: DisplayPlayer =
+    selectedSpot?.type === "terminal"
+      ? selectedSpot.prevPlayer
+      : selectedSpot?.type === "player"
+      ? selectedSpot.player
+      : "oop";
+  const displayPlayerBasics =
+    displayOptions.playerBasics === "auto"
+      ? autoPlayerBasics
+      : displayOptions.playerBasics;
+  const displayPlayerChance =
+    displayOptions.playerChance === "auto"
+      ? autoPlayerChance
+      : displayOptions.playerChance;
+
+  const updateDisplayMode = (mode: DisplayMode) => {
+    if (mode === "chance" && !selectedChance) return;
+    setDisplayMode(mode);
+  };
+
+  const onNavigatorUpdate = (result: Omit<LoadedResults, "cards">) => {
+    setLoaded({ ...result, cards: loaded.cards });
+    setHoverContent(null);
+    if (result.selectedChance && displayMode !== "chance") {
+      setDisplayMode("chance");
+    } else if (!result.selectedChance && displayMode === "chance") {
+      setDisplayMode("basics");
+    }
+  };
+
+  return (
+    <div className="flex h-full flex-col">
+      <ResultNavigator
+        cards={loaded.cards}
+        dealRequest={dealRequest}
+        onDealHandled={() => setDealRequest(null)}
+        onUpdate={onNavigatorUpdate}
+      />
+      <ResultMiddle
+        autoPlayerBasics={autoPlayerBasics}
+        autoPlayerChance={autoPlayerChance}
+        chanceMode={chanceMode}
+        displayMode={displayMode}
+        displayOptions={displayOptions}
+        onDisplayMode={updateDisplayMode}
+        onDisplayOptions={setDisplayOptions}
+      />
+
+      <div className="min-h-0 flex-grow">
+        {displayMode === "basics" && (
+          <div className="flex h-full min-h-0">
+            <div className="min-w-0 flex-[4]">
+              <ResultMatrix
+                cards={loaded.cards}
+                currentBoard={loaded.currentBoard}
+                displayOptions={displayOptions}
+                displayPlayer={displayPlayerBasics}
+                onHoverContent={setHoverContent}
+                results={loaded.results}
+                selectedChance={selectedChance}
+                selectedSpot={selectedSpot}
+                totalBetAmount={loaded.totalBetAmount}
+              />
+            </div>
+            <div className="min-w-0 flex-[3] border-l border-gray-500">
+              <ResultTable
+                cards={loaded.cards}
+                displayPlayer={displayPlayerBasics}
+                hoverContent={hoverContent}
+                results={loaded.results}
+                selectedSpot={selectedSpot}
+              />
+            </div>
+          </div>
+        )}
+
+        {displayMode === "graphs" && (
+          <ResultGraphs
+            cards={loaded.cards}
+            displayOptions={displayOptions}
+            displayPlayer={displayPlayerBasics}
+            results={loaded.results}
+          />
+        )}
+
+        {displayMode === "compare" && (
+          <div className="flex h-full min-h-0">
+            <div className="min-w-0 flex-[5]">
+              <ResultMatrix
+                cards={loaded.cards}
+                currentBoard={loaded.currentBoard}
+                displayOptions={displayOptions}
+                displayPlayer="oop"
+                isCompareMode
+                results={loaded.results}
+                selectedChance={selectedChance}
+                selectedSpot={selectedSpot}
+                totalBetAmount={loaded.totalBetAmount}
+              />
+            </div>
+            <div className="min-w-[13rem] flex-[2] border-x border-gray-500">
+              <ResultSummary
+                results={loaded.results}
+                selectedChance={selectedChance}
+                selectedSpot={selectedSpot}
+              />
+            </div>
+            <div className="min-w-0 flex-[5]">
+              <ResultMatrix
+                cards={loaded.cards}
+                currentBoard={loaded.currentBoard}
+                displayOptions={displayOptions}
+                displayPlayer="ip"
+                isCompareMode
+                results={loaded.results}
+                selectedChance={selectedChance}
+                selectedSpot={selectedSpot}
+                totalBetAmount={loaded.totalBetAmount}
+              />
+            </div>
+          </div>
+        )}
+
+        {displayMode === "chance" && selectedChance && (
+          <ResultChance
+            chanceReports={loaded.chanceReports}
+            displayOptions={displayOptions}
+            displayPlayer={displayPlayerChance}
+            onDealCard={setDealRequest}
+            selectedChance={selectedChance}
+            selectedSpot={selectedSpot}
+          />
+        )}
+      </div>
+    </div>
+  );
+}

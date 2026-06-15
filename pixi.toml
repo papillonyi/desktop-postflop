@@ -1,0 +1,24 @@
+[workspace]
+channels = ["conda-forge"]
+name = "desktop-postflop"
+platforms = ["osx-arm64"]
+version = "0.1.0"
+
+[tasks]
+install = "npm install"
+dev = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo run --manifest-path src-tauri/Cargo.toml --bin web-server"
+frontend-dev = "npm run dev"
+server-dev = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo run --manifest-path src-tauri/Cargo.toml --bin web-server"
+server-check = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo check --manifest-path src-tauri/Cargo.toml --bin web-server"
+server-build = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo build --manifest-path src-tauri/Cargo.toml --bin web-server --release"
+server-start = "src-tauri/target/release/web-server"
+build = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo build --manifest-path src-tauri/Cargo.toml --bin web-server --release"
+frontend-build = "npm run build"
+lint = "npm run lint"
+format = "npm run format"
+cargo-check = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo check --manifest-path src-tauri/Cargo.toml"
+solver-test = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo test --manifest-path ../postflop-solver/Cargo.toml"
+
+[dependencies]
+nodejs = ">=20,<21"
+rust = ">=1.88,<2"
