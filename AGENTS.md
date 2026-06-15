@@ -9,7 +9,7 @@ Desktop Postflop is a single-user web-server app with a React/TypeScript fronten
 - `pixi install`: create the local Rust/Node dev environment from `pixi.toml`.
 - `pixi run install`: run `npm install` inside the Pixi environment.
 - `pixi run dev` / `pixi run server-dev`: run the Rust web server on `127.0.0.1:3000`.
-- `pixi run frontend-dev`: start the Vite frontend only on `0.0.0.0:30000`.
+- `pixi run frontend-dev`: start the Vite frontend only, preferring `0.0.0.0:30001`.
 - `pixi run frontend-build`: build the React frontend into `dist/`.
 - `pixi run build` / `pixi run server-build`: build the release web-server binary.
 - `pixi run server-start`: run the release web-server binary.

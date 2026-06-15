@@ -12,6 +12,7 @@ pub mod files;
 pub mod game;
 pub mod range;
 mod system;
+pub mod training;
 pub mod tree;
 
 pub use app_state::SharedAppState;
@@ -79,6 +80,11 @@ pub fn app_with_state(state: SharedAppState) -> Router {
         .route("/api/game/load", post(game::load_from_file))
         .route("/api/game/load-board", get(game::load_board))
         .route("/api/game/file", get(files::download).post(files::upload))
+        .route(
+            "/api/training/library/summary",
+            post(training::library_summary),
+        )
+        .route("/api/training/session/start", post(training::session_start))
         .fallback_service(static_files)
         .with_state(std::sync::Arc::new(state))
 }

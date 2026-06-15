@@ -8,8 +8,8 @@ export default defineConfig({
   clearScreen: false,
   server: {
     host: "0.0.0.0",
-    port: 30000,
-    strictPort: true,
+    port: 30001,
+    strictPort: false,
     proxy: {
       "/api": {
         target: "http://127.0.0.1:3000",

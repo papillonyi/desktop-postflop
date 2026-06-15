@@ -52,7 +52,7 @@ pixi run frontend-dev
 
 Open the Vite URL printed by `frontend-dev`. Vite proxies `/api` requests to `http://127.0.0.1:3000`.
 
-The frontend dev server listens on `0.0.0.0:30000`, so it can be reached from another machine through the Linux host's IP address, for example `http://<linux-host-ip>:30000`.
+The frontend dev server prefers `0.0.0.0:30001` and falls back to the next free port if that is already in use. Use the Vite URL printed by `frontend-dev`; from another machine, replace the host with the Linux host's IP address, for example `http://<linux-host-ip>:30001`.
 
 ## Production-Style Local Run
 
@@ -76,6 +76,24 @@ http://127.0.0.1:3000
 ```
 
 The current server serves `dist/` from this checkout and binds to `127.0.0.1:3000`.
+
+## Training Data Workflow
+
+Training profiles live in `training-profiles/`. Profiles reference range files by `oopRangePath` and `ipRangePath`; the checked-in source ranges live under `training-ranges/`. The 6-max profile set uses `training-ranges/6max`, copied from `~/workspace/gto/ranges/6max_range`, and `training-profiles/smoke.json` uses tiny `AA` vs `KK` ranges for fast development checks.
+
+Generated solver files are not committed. Write precomputed training libraries outside this repo, for example:
+
+```sh
+pixi run training-precompute --config training-profiles/smoke.json --out ../training-games-dev --overwrite
+```
+
+For a quick profile/path validation without generating `.bin` files:
+
+```sh
+pixi run training-precompute --config training-profiles/6max-heads-up.json --out /tmp/desktop-postflop-6max-dry-run --dry-run --limit 3 --overwrite
+```
+
+The training library manifest is written to `<out>/manifest.json`, and solved jobs are stored as `<out>/<potType>/<profileId>/*.bin`. The Training page defaults to `../training-games-dev`; pass a different root in the page input if you generated data elsewhere.
 
 ## Checks
 

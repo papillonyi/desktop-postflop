@@ -2,10 +2,56 @@ import { ChanceReports, Results } from "./result-types";
 
 const API_BASE = "/api";
 
+type ApiErrorPayload = {
+  error?: unknown;
+  validationErrors?: unknown;
+};
+
+function getBackendErrorMessage(text: string): string | null {
+  if (!text) return null;
+
+  try {
+    const payload = JSON.parse(text) as ApiErrorPayload;
+    if (
+      payload &&
+      typeof payload === "object" &&
+      typeof payload.error === "string" &&
+      payload.error.trim()
+    ) {
+      return payload.error;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+async function throwApiError(
+  method: "GET" | "POST",
+  path: string,
+  res: Response
+): Promise<never> {
+  const fallback = `${method} ${path} failed: ${res.status} ${res.statusText}`;
+
+  try {
+    const backendMessage = getBackendErrorMessage(await res.text());
+    if (backendMessage) {
+      throw new Error(`${fallback}: ${backendMessage}`);
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith(fallback)) {
+      throw err;
+    }
+  }
+
+  throw new Error(fallback);
+}
+
 async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { method: "GET" });
   if (!res.ok) {
-    throw new Error(`GET ${path} failed: ${res.status} ${res.statusText}`);
+    await throwApiError("GET", path, res);
   }
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
@@ -18,7 +64,7 @@ async function apiPost<T>(path: string, body?: unknown): Promise<T> {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
-    throw new Error(`POST ${path} failed: ${res.status} ${res.statusText}`);
+    await throwApiError("POST", path, res);
   }
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
@@ -468,4 +514,75 @@ export const loadGameFromBin = async (path: string) => {
 export const loadBoardFromGame = async (): Promise<number[]> => {
   const resp = await apiGet<ValueResp<number[]>>("/game/load-board");
   return resp.value;
+};
+
+/* Training */
+
+export type TrainingPosition = "UTG" | "MP" | "CO" | "BTN" | "SB" | "BB";
+export type TrainingPotType = "2bp" | "3bp" | "4bp";
+export type TrainingPlayer = "oop" | "ip";
+
+export type TrainingValidationError = {
+  profileId: string | null;
+  path: string | null;
+  message: string;
+};
+
+export type TrainingLibrarySummary = {
+  root: string;
+  manifest: {
+    version: number;
+    generatedAt: string;
+    configPath: string | null;
+    outputDir: string;
+    jobCount: number;
+  };
+  solvedJobCount: number;
+  countsByHeroPosition: Record<string, number>;
+  countsByPotType: Record<string, number>;
+  countsByProfileId: Record<string, number>;
+  validationErrors: TrainingValidationError[];
+};
+
+export type TrainingHandSelection = {
+  packed: number;
+  index: number;
+  cards: number[];
+};
+
+export type TrainingSession = {
+  root: string;
+  profileId: string;
+  profileWeight: number;
+  spot: string;
+  potType: TrainingPotType;
+  oopPosition: TrainingPosition;
+  ipPosition: TrainingPosition;
+  board: number[];
+  startingPot: number;
+  effectiveStack: number;
+  heroPosition: TrainingPosition;
+  villainPosition: TrainingPosition;
+  heroPlayer: TrainingPlayer;
+  villainPlayer: TrainingPlayer;
+  heroHand: TrainingHandSelection;
+  villainHand: TrainingHandSelection;
+  path: string;
+};
+
+export const trainingLibrarySummary = async (
+  root?: string
+): Promise<TrainingLibrarySummary> => {
+  return await apiPost<TrainingLibrarySummary>("/training/library/summary", {
+    root: root || undefined,
+  });
+};
+
+export const trainingSessionStart = async (req: {
+  root?: string;
+  heroPosition: TrainingPosition;
+  potTypes?: TrainingPotType[];
+  profileIds?: string[];
+}): Promise<TrainingSession> => {
+  return await apiPost<TrainingSession>("/training/session/start", req);
 };

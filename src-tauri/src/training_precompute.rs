@@ -139,10 +139,10 @@ pub struct TrainingProfile {
     pub rake_rate: f64,
     #[serde(rename = "rakeCap")]
     pub rake_cap: f64,
-    #[serde(rename = "oopRange")]
-    pub oop_range: String,
-    #[serde(rename = "ipRange")]
-    pub ip_range: String,
+    #[serde(default, rename = "oopRangePath")]
+    pub oop_range_path: PathBuf,
+    #[serde(default, rename = "ipRangePath")]
+    pub ip_range_path: PathBuf,
     #[serde(rename = "treePreset")]
     pub tree_preset: String,
     #[serde(rename = "flopCount")]
@@ -158,7 +158,7 @@ pub struct TrainingProfile {
 
 impl TrainingProfile {
     pub fn run_status_precheck(&self) -> Option<JobStatus> {
-        if self.oop_range.trim().is_empty() || self.ip_range.trim().is_empty() {
+        if self.oop_range_path.as_os_str().is_empty() || self.ip_range_path.as_os_str().is_empty() {
             Some(JobStatus::MissingRange)
         } else {
             None
@@ -166,7 +166,14 @@ impl TrainingProfile {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone)]
+pub struct LoadedProfileRanges {
+    pub oop_range: String,
+    pub ip_range: String,
+    pub range_fingerprint: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum JobStatus {
     Planned,
@@ -185,7 +192,7 @@ pub struct RunOptions {
     pub dry_run: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Manifest {
     pub version: u32,
@@ -195,10 +202,12 @@ pub struct Manifest {
     pub jobs: Vec<JobManifestEntry>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JobManifestEntry {
     pub profile_id: String,
+    #[serde(default = "default_profile_weight")]
+    pub profile_weight: u32,
     pub spot: String,
     pub pot_type: String,
     pub oop_position: String,
@@ -208,20 +217,40 @@ pub struct JobManifestEntry {
     pub effective_stack: i32,
     pub tree_preset: String,
     pub profile_fingerprint: String,
+    #[serde(default)]
+    pub oop_range_path: PathBuf,
+    #[serde(default)]
+    pub ip_range_path: PathBuf,
+    #[serde(default)]
+    pub range_fingerprint: String,
     pub target_exploitability: f32,
     pub max_iterations: u32,
     pub iterations_completed: u32,
     pub final_exploitability: Option<f32>,
     pub status: JobStatus,
+    #[serde(default)]
+    pub output_relative_path: Option<PathBuf>,
     pub path: Option<PathBuf>,
     pub duration_ms: Option<u128>,
     pub error: Option<String>,
 }
 
 impl JobManifestEntry {
-    pub fn planned(profile: &TrainingProfile, flop: [u8; 3], path: PathBuf) -> Self {
+    pub fn planned(
+        profile: &TrainingProfile,
+        ranges: Option<&LoadedProfileRanges>,
+        flop: [u8; 3],
+        output_dir: &Path,
+    ) -> Self {
+        let range_fingerprint = ranges
+            .map(|ranges| ranges.range_fingerprint.clone())
+            .unwrap_or_default();
+        let profile_fingerprint = profile_fingerprint(profile, &range_fingerprint);
+        let output_relative_path = output_relative_path(profile, &profile_fingerprint, flop);
+        let path = output_dir.join(&output_relative_path);
         Self {
             profile_id: profile.id.clone(),
+            profile_weight: profile.weight,
             spot: profile.spot.clone(),
             pot_type: profile.pot_type.clone(),
             oop_position: profile.oop_position.clone(),
@@ -230,17 +259,25 @@ impl JobManifestEntry {
             starting_pot: profile.starting_pot,
             effective_stack: profile.effective_stack,
             tree_preset: profile.tree_preset.clone(),
-            profile_fingerprint: profile_fingerprint(profile),
+            profile_fingerprint,
+            oop_range_path: profile.oop_range_path.clone(),
+            ip_range_path: profile.ip_range_path.clone(),
+            range_fingerprint,
             target_exploitability: profile.target_exploitability,
             max_iterations: profile.max_iterations,
             iterations_completed: 0,
             final_exploitability: None,
             status: JobStatus::Planned,
+            output_relative_path: Some(output_relative_path),
             path: Some(path),
             duration_ms: None,
             error: None,
         }
     }
+}
+
+fn default_profile_weight() -> u32 {
+    1
 }
 
 pub fn validate_config(config: &TrainingConfig) -> Result<(), String> {
@@ -253,11 +290,36 @@ pub fn validate_config(config: &TrainingConfig) -> Result<(), String> {
         if profile.id.trim().is_empty() {
             return Err("profile id cannot be empty".to_string());
         }
+        validate_path_component("profile id", &profile.id)?;
+        validate_path_component("potType", &profile.pot_type)?;
         if !ids.insert(profile.id.as_str()) {
             return Err(format!("duplicate profile id: {}", profile.id));
         }
+        if profile.oop_range_path.as_os_str().is_empty() {
+            return Err(format!("oopRangePath cannot be empty for {}", profile.id));
+        }
+        if profile.ip_range_path.as_os_str().is_empty() {
+            return Err(format!("ipRangePath cannot be empty for {}", profile.id));
+        }
     }
 
+    Ok(())
+}
+
+fn validate_path_component(label: &str, value: &str) -> Result<(), String> {
+    if value.is_empty() || value == "." || value == ".." {
+        return Err(format!(
+            "{label} cannot be a reserved path component: {value}"
+        ));
+    }
+    if !value
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    {
+        return Err(format!(
+            "{label} can only contain ASCII letters, digits, underscores, and hyphens: {value}"
+        ));
+    }
     Ok(())
 }
 
@@ -308,19 +370,95 @@ pub fn flop_to_string(flop: [u8; 3]) -> String {
         .join("")
 }
 
-pub fn output_path(output_dir: &Path, profile: &TrainingProfile, flop: [u8; 3]) -> PathBuf {
-    let fingerprint = profile_fingerprint(profile);
-    output_dir.join(&profile.id).join(format!(
-        "{}__cfg{}__flop_{}__pot{}__stack{}.bin",
-        profile.id,
-        fingerprint,
-        flop_to_string(flop),
-        profile.starting_pot,
-        profile.effective_stack
-    ))
+pub fn output_relative_path(
+    profile: &TrainingProfile,
+    profile_fingerprint: &str,
+    flop: [u8; 3],
+) -> PathBuf {
+    PathBuf::from(&profile.pot_type)
+        .join(&profile.id)
+        .join(format!(
+            "{}__cfg{}__flop_{}__pot{}__stack{}.bin",
+            profile.id,
+            profile_fingerprint,
+            flop_to_string(flop),
+            profile.starting_pot,
+            profile.effective_stack
+        ))
 }
 
-pub fn profile_fingerprint(profile: &TrainingProfile) -> String {
+pub fn output_path(
+    output_dir: &Path,
+    profile: &TrainingProfile,
+    profile_fingerprint: &str,
+    flop: [u8; 3],
+) -> PathBuf {
+    output_dir.join(output_relative_path(profile, profile_fingerprint, flop))
+}
+
+pub fn load_profile_ranges(
+    config_path: &Path,
+    profile: &TrainingProfile,
+) -> Result<LoadedProfileRanges, String> {
+    let config_dir = config_path.parent().unwrap_or_else(|| Path::new("."));
+    let oop_path = resolve_profile_relative_path(config_dir, &profile.oop_range_path);
+    let ip_path = resolve_profile_relative_path(config_dir, &profile.ip_range_path);
+
+    let oop_range = std::fs::read_to_string(&oop_path).map_err(|err| {
+        format!(
+            "failed to read oopRangePath for {} ({}): {err}",
+            profile.id,
+            oop_path.display()
+        )
+    })?;
+    let ip_range = std::fs::read_to_string(&ip_path).map_err(|err| {
+        format!(
+            "failed to read ipRangePath for {} ({}): {err}",
+            profile.id,
+            ip_path.display()
+        )
+    })?;
+
+    let oop_range = oop_range.trim().to_string();
+    let ip_range = ip_range.trim().to_string();
+    if oop_range.is_empty() {
+        return Err(format!(
+            "oopRangePath for {} is empty ({})",
+            profile.id,
+            oop_path.display()
+        ));
+    }
+    if ip_range.is_empty() {
+        return Err(format!(
+            "ipRangePath for {} is empty ({})",
+            profile.id,
+            ip_path.display()
+        ));
+    }
+
+    Ok(LoadedProfileRanges {
+        range_fingerprint: range_fingerprint(&oop_range, &ip_range),
+        oop_range,
+        ip_range,
+    })
+}
+
+fn resolve_profile_relative_path(config_dir: &Path, path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        config_dir.join(path)
+    }
+}
+
+pub fn range_fingerprint(oop_range: &str, ip_range: &str) -> String {
+    let mut payload = String::new();
+    append_fingerprint_field(&mut payload, "oop_range", oop_range.trim());
+    append_fingerprint_field(&mut payload, "ip_range", ip_range.trim());
+    fingerprint_payload(&payload)
+}
+
+pub fn profile_fingerprint(profile: &TrainingProfile, range_fingerprint: &str) -> String {
     let mut payload = String::new();
     append_fingerprint_field(&mut payload, "id", &profile.id);
     append_fingerprint_field(&mut payload, "pot_type", &profile.pot_type);
@@ -330,8 +468,7 @@ pub fn profile_fingerprint(profile: &TrainingProfile) -> String {
     append_fingerprint_field(&mut payload, "effective_stack", profile.effective_stack);
     append_fingerprint_field(&mut payload, "rake_rate_bits", profile.rake_rate.to_bits());
     append_fingerprint_field(&mut payload, "rake_cap_bits", profile.rake_cap.to_bits());
-    append_fingerprint_field(&mut payload, "oop_range", profile.oop_range.trim());
-    append_fingerprint_field(&mut payload, "ip_range", profile.ip_range.trim());
+    append_fingerprint_field(&mut payload, "range_fingerprint", range_fingerprint);
     append_fingerprint_field(&mut payload, "tree_preset", &profile.tree_preset);
     append_fingerprint_field(
         &mut payload,
@@ -345,6 +482,10 @@ pub fn profile_fingerprint(profile: &TrainingProfile) -> String {
         profile.enable_compression,
     );
 
+    fingerprint_payload(&payload)
+}
+
+fn fingerprint_payload(payload: &str) -> String {
     let mut hash = 0xcbf2_9ce4_8422_2325u64;
     for byte in payload.as_bytes() {
         hash ^= u64::from(*byte);
@@ -360,6 +501,7 @@ fn append_fingerprint_field<T: std::fmt::Display>(payload: &mut String, key: &st
 
 pub fn build_job_plan(
     config: &TrainingConfig,
+    config_path: &Path,
     output_dir: &Path,
     opts: &RunOptions,
 ) -> Result<Manifest, String> {
@@ -388,6 +530,13 @@ pub fn build_job_plan(
             continue;
         }
 
+        let loaded_ranges = match profile.run_status_precheck() {
+            Some(_) => Err("profile is missing one or both range paths".to_string()),
+            None => load_profile_ranges(config_path, profile),
+        };
+        let loaded_ranges_ref = loaded_ranges.as_ref().ok();
+        let range_error = loaded_ranges.as_ref().err().cloned();
+
         let seed = opts.seed.unwrap_or(profile.seed);
         let count = profile.flop_count.max(1);
         for flop in sample_flops(seed, count) {
@@ -395,10 +544,10 @@ pub fn build_job_plan(
                 break;
             }
 
-            let path = output_path(output_dir, profile, flop);
-            let mut job = JobManifestEntry::planned(profile, flop, path);
-            if let Some(status) = profile.run_status_precheck() {
-                job.status = status;
+            let mut job = JobManifestEntry::planned(profile, loaded_ranges_ref, flop, output_dir);
+            if let Some(error) = &range_error {
+                job.status = JobStatus::MissingRange;
+                job.error = Some(error.clone());
             } else if job.path.as_ref().is_some_and(|path| path.exists()) && !opts.overwrite {
                 job.status = JobStatus::SkippedExisting;
             }
@@ -476,6 +625,7 @@ fn bet_size_options(bet: &str, raise: &str) -> Result<BetSizeOptions, String> {
 
 pub fn execute_job(
     profile: &TrainingProfile,
+    ranges: &LoadedProfileRanges,
     flop: [u8; 3],
     job: &mut JobManifestEntry,
     overwrite: bool,
@@ -492,18 +642,11 @@ pub fn execute_job(
         return Ok(());
     }
 
-    if let Some(status) = profile.run_status_precheck() {
-        job.status = status;
-        job.error = Some("profile is missing one or both ranges".to_string());
-        job.duration_ms = Some(start.elapsed().as_millis());
-        return Ok(());
-    }
-
-    let oop_range = profile
+    let oop_range = ranges
         .oop_range
         .parse()
         .map_err(|err| format!("invalid OOP range for {}: {err}", profile.id))?;
-    let ip_range = profile
+    let ip_range = ranges
         .ip_range
         .parse()
         .map_err(|err| format!("invalid IP range for {}: {err}", profile.id))?;
@@ -540,11 +683,12 @@ pub fn execute_job(
     }
 
     let memo = format!(
-        "profile={},spot={},flop={},profile_fingerprint={}",
+        "profile={},spot={},flop={},profile_fingerprint={},range_fingerprint={}",
         profile.id,
         profile.spot,
         flop_to_string(flop),
-        profile_fingerprint(profile)
+        job.profile_fingerprint,
+        ranges.range_fingerprint
     );
     save_data_to_file(&game, &memo, &path, None)
         .map_err(|err| format!("failed to save {}: {err}", path.display()))?;
@@ -627,55 +771,95 @@ pub fn run_cli(opts: CliOptions) -> Result<(), String> {
         overwrite: opts.overwrite,
         dry_run: opts.dry_run,
     };
-    let mut manifest = build_job_plan(&config, &opts.output_dir, &run_options)?;
+    let mut manifest = build_job_plan(&config, &opts.config_path, &opts.output_dir, &run_options)?;
     manifest.config_path = Some(opts.config_path.clone());
+    write_manifest(&manifest)?;
 
     if !run_options.dry_run {
-        for job in &mut manifest.jobs {
-            if job.status != JobStatus::Planned {
+        let output_dir = manifest.output_dir.clone();
+        for index in 0..manifest.jobs.len() {
+            if manifest.jobs[index].status != JobStatus::Planned {
                 continue;
             }
 
+            let profile_id = manifest.jobs[index].profile_id.clone();
             let Some(profile) = config
                 .profiles
                 .iter()
-                .find(|profile| profile.id == job.profile_id)
+                .find(|profile| profile.id == profile_id)
             else {
-                job.status = JobStatus::Failed;
-                job.error = Some(format!("profile not found: {}", job.profile_id));
+                manifest.jobs[index].status = JobStatus::Failed;
+                manifest.jobs[index].error = Some(format!("profile not found: {profile_id}"));
+                write_manifest(&manifest)?;
                 continue;
             };
 
-            let flop = match flop_from_string(&job.flop) {
+            let flop_text = manifest.jobs[index].flop.clone();
+            let flop = match flop_from_string(&flop_text) {
                 Ok(flop) => flop,
                 Err(err) => {
-                    job.status = JobStatus::Failed;
-                    job.error = Some(err);
+                    manifest.jobs[index].status = JobStatus::Failed;
+                    manifest.jobs[index].error = Some(err);
+                    write_manifest(&manifest)?;
                     continue;
                 }
             };
 
-            if let Err(err) = execute_job(profile, flop, job, run_options.overwrite) {
-                job.status = JobStatus::Failed;
-                job.error = Some(err);
+            let ranges = match load_profile_ranges(&opts.config_path, profile) {
+                Ok(ranges) => ranges,
+                Err(err) => {
+                    manifest.jobs[index].status = JobStatus::MissingRange;
+                    manifest.jobs[index].error = Some(err);
+                    write_manifest(&manifest)?;
+                    continue;
+                }
+            };
+
+            {
+                let job = &mut manifest.jobs[index];
+                job.range_fingerprint = ranges.range_fingerprint.clone();
+                job.profile_fingerprint = profile_fingerprint(profile, &job.range_fingerprint);
+                let relative_path = output_relative_path(profile, &job.profile_fingerprint, flop);
+                job.output_relative_path = Some(relative_path.clone());
+                job.path = Some(output_dir.join(relative_path));
             }
+
+            let result = {
+                let job = &mut manifest.jobs[index];
+                execute_job(profile, &ranges, flop, job, run_options.overwrite)
+            };
+            if let Err(err) = result {
+                manifest.jobs[index].status = JobStatus::Failed;
+                manifest.jobs[index].error = Some(err);
+            }
+            write_manifest(&manifest)?;
         }
     }
 
-    write_manifest(&manifest)
+    Ok(())
 }
 
 fn write_manifest(manifest: &Manifest) -> Result<(), String> {
     std::fs::create_dir_all(&manifest.output_dir)
         .map_err(|err| format!("failed to create output directory: {err}"))?;
     let path = manifest.output_dir.join("manifest.json");
+    let tmp_path = manifest
+        .output_dir
+        .join(format!("manifest.json.tmp.{}", std::process::id()));
     let json = serde_json::to_string_pretty(manifest)
         .map_err(|err| format!("failed to serialize manifest: {err}"))?;
-    std::fs::write(&path, json)
-        .map_err(|err| format!("failed to write manifest {}: {err}", path.display()))
+    std::fs::write(&tmp_path, json)
+        .map_err(|err| format!("failed to write manifest {}: {err}", tmp_path.display()))?;
+    std::fs::rename(&tmp_path, &path).map_err(|err| {
+        format!(
+            "failed to replace manifest {} with {}: {err}",
+            path.display(),
+            tmp_path.display()
+        )
+    })
 }
 
-fn flop_from_string(text: &str) -> Result<[u8; 3], String> {
+pub(crate) fn flop_from_string(text: &str) -> Result<[u8; 3], String> {
     if text.len() != 6 {
         return Err(format!("invalid flop string: {text}"));
     }
@@ -764,7 +948,7 @@ mod tests {
     use std::collections::BTreeSet;
     use std::path::{Path, PathBuf};
 
-    fn minimal_profile(id: &str) -> TrainingProfile {
+    fn path_profile(id: &str, oop_range_path: PathBuf, ip_range_path: PathBuf) -> TrainingProfile {
         TrainingProfile {
             id: id.to_string(),
             enabled: true,
@@ -777,8 +961,8 @@ mod tests {
             effective_stack: 10000,
             rake_rate: 0.0,
             rake_cap: 0.0,
-            oop_range: String::new(),
-            ip_range: String::new(),
+            oop_range_path,
+            ip_range_path,
             tree_preset: "standard_srp".to_string(),
             flop_count: 10,
             seed: 1,
@@ -788,12 +972,12 @@ mod tests {
         }
     }
 
+    fn minimal_profile(id: &str) -> TrainingProfile {
+        path_profile(id, PathBuf::from("oop.txt"), PathBuf::from("ip.txt"))
+    }
+
     fn runnable_profile(id: &str) -> TrainingProfile {
-        TrainingProfile {
-            oop_range: "AA".to_string(),
-            ip_range: "KK".to_string(),
-            ..minimal_profile(id)
-        }
+        minimal_profile(id)
     }
 
     fn smoke_profile() -> TrainingProfile {
@@ -803,6 +987,14 @@ mod tests {
             max_iterations: 1,
             enable_compression: false,
             ..runnable_profile("smoke_2bp_btn_vs_bb_100bb")
+        }
+    }
+
+    fn smoke_ranges() -> LoadedProfileRanges {
+        LoadedProfileRanges {
+            oop_range: "AA".to_string(),
+            ip_range: "KK".to_string(),
+            range_fingerprint: range_fingerprint("AA", "KK"),
         }
     }
 
@@ -824,9 +1016,133 @@ mod tests {
     }
 
     #[test]
-    fn missing_ranges_are_valid_but_not_runnable() {
-        let profile = minimal_profile("p1");
+    fn deserialize_profile_uses_range_paths() {
+        let raw = r#"{
+            "id": "p1",
+            "enabled": true,
+            "weight": 1,
+            "spot": "Test spot",
+            "potType": "2bp",
+            "oopPosition": "BB",
+            "ipPosition": "BTN",
+            "startingPot": 550,
+            "effectiveStack": 10000,
+            "rakeRate": 0.0,
+            "rakeCap": 0.0,
+            "oopRangePath": "../ranges/oop.txt",
+            "ipRangePath": "../ranges/ip.txt",
+            "treePreset": "standard_srp",
+            "flopCount": 1,
+            "seed": 1,
+            "targetExploitability": 0.3,
+            "maxIterations": 1,
+            "enableCompression": false
+        }"#;
+        let profile: TrainingProfile = serde_json::from_str(raw).unwrap();
+        assert_eq!(profile.oop_range_path, PathBuf::from("../ranges/oop.txt"));
+        assert_eq!(profile.ip_range_path, PathBuf::from("../ranges/ip.txt"));
+    }
+
+    #[test]
+    fn missing_range_paths_are_not_runnable() {
+        let profile = path_profile("p1", PathBuf::new(), PathBuf::from("ip.txt"));
         assert_eq!(profile.run_status_precheck(), Some(JobStatus::MissingRange));
+    }
+
+    #[test]
+    fn validate_config_rejects_empty_range_paths() {
+        let cfg = TrainingConfig {
+            version: 1,
+            profiles: vec![path_profile("p1", PathBuf::new(), PathBuf::from("ip.txt"))],
+        };
+        let err = validate_config(&cfg).unwrap_err();
+        assert!(err.contains("oopRangePath"));
+    }
+
+    #[test]
+    fn validate_config_rejects_unsafe_output_path_components() {
+        let mut profile = minimal_profile("../bad");
+        let cfg = TrainingConfig {
+            version: 1,
+            profiles: vec![profile.clone()],
+        };
+        let err = validate_config(&cfg).unwrap_err();
+        assert!(err.contains("profile id"));
+
+        profile.id = "p1".to_string();
+        profile.pot_type = "../bad".to_string();
+        let cfg = TrainingConfig {
+            version: 1,
+            profiles: vec![profile],
+        };
+        let err = validate_config(&cfg).unwrap_err();
+        assert!(err.contains("potType"));
+    }
+
+    #[test]
+    fn old_inline_range_profile_parses_but_fails_validation() {
+        let raw = r#"{
+            "version": 1,
+            "profiles": [{
+                "id": "p1",
+                "enabled": true,
+                "weight": 1,
+                "spot": "Test spot",
+                "potType": "2bp",
+                "oopPosition": "BB",
+                "ipPosition": "BTN",
+                "startingPot": 550,
+                "effectiveStack": 10000,
+                "rakeRate": 0.0,
+                "rakeCap": 0.0,
+                "oopRange": "AA",
+                "ipRange": "KK",
+                "treePreset": "standard_srp",
+                "flopCount": 1,
+                "seed": 1,
+                "targetExploitability": 0.3,
+                "maxIterations": 1,
+                "enableCompression": false
+            }]
+        }"#;
+        let config: TrainingConfig = serde_json::from_str(raw).unwrap();
+        let err = validate_config(&config).unwrap_err();
+        assert!(err.contains("oopRangePath"));
+    }
+
+    #[test]
+    fn load_profile_ranges_reads_paths_relative_to_config_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ranges = tmp.path().join("ranges");
+        std::fs::create_dir_all(&ranges).unwrap();
+        std::fs::write(ranges.join("oop.txt"), "AA\n").unwrap();
+        std::fs::write(ranges.join("ip.txt"), "KK\n").unwrap();
+        let config_path = tmp.path().join("profiles/config.json");
+        std::fs::create_dir_all(config_path.parent().unwrap()).unwrap();
+
+        let profile = path_profile(
+            "p1",
+            PathBuf::from("../ranges/oop.txt"),
+            PathBuf::from("../ranges/ip.txt"),
+        );
+        let loaded = load_profile_ranges(&config_path, &profile).unwrap();
+
+        assert_eq!(loaded.oop_range, "AA");
+        assert_eq!(loaded.ip_range, "KK");
+        assert_eq!(loaded.range_fingerprint, range_fingerprint("AA", "KK"));
+    }
+
+    #[test]
+    fn load_profile_ranges_rejects_empty_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config_path = tmp.path().join("config.json");
+        std::fs::write(tmp.path().join("oop.txt"), "").unwrap();
+        std::fs::write(tmp.path().join("ip.txt"), "KK").unwrap();
+        let profile = minimal_profile("p1");
+
+        let err = load_profile_ranges(&config_path, &profile).unwrap_err();
+        assert!(err.contains("oopRangePath"));
+        assert!(err.contains("p1"));
     }
 
     #[test]
@@ -842,25 +1158,40 @@ mod tests {
     #[test]
     fn output_path_uses_profile_flop_pot_and_stack() {
         let profile = runnable_profile("2bp_btn_vs_bb_100bb");
+        let ranges = smoke_ranges();
         let flop = [51, 21, 0];
-        let path = output_path(Path::new("training-games"), &profile, flop);
-        let fingerprint = profile_fingerprint(&profile);
+        let fingerprint = profile_fingerprint(&profile, &ranges.range_fingerprint);
+        let path = output_path(Path::new("training-games"), &profile, &fingerprint, flop);
         assert_eq!(
             path,
             PathBuf::from(format!(
-                "training-games/2bp_btn_vs_bb_100bb/2bp_btn_vs_bb_100bb__cfg{fingerprint}__flop_2c7dAs__pot550__stack10000.bin"
+                "training-games/2bp/2bp_btn_vs_bb_100bb/2bp_btn_vs_bb_100bb__cfg{fingerprint}__flop_2c7dAs__pot550__stack10000.bin"
             ))
         );
     }
 
     #[test]
-    fn output_path_changes_when_solver_inputs_change() {
-        let mut profile = runnable_profile("p1");
+    fn output_path_changes_when_range_fingerprint_changes() {
+        let profile = runnable_profile("p1");
         let flop = [51, 21, 0];
-        let original = output_path(Path::new("training-games"), &profile, flop);
+        let original_range_fingerprint = range_fingerprint("AA", "KK");
+        let changed_range_fingerprint = range_fingerprint("QQ", "KK");
+        let original_profile_fingerprint =
+            profile_fingerprint(&profile, &original_range_fingerprint);
+        let changed_profile_fingerprint = profile_fingerprint(&profile, &changed_range_fingerprint);
+        let original = output_path(
+            Path::new("training-games"),
+            &profile,
+            &original_profile_fingerprint,
+            flop,
+        );
 
-        profile.oop_range = "QQ".to_string();
-        let changed = output_path(Path::new("training-games"), &profile, flop);
+        let changed = output_path(
+            Path::new("training-games"),
+            &profile,
+            &changed_profile_fingerprint,
+            flop,
+        );
 
         assert_ne!(original, changed);
     }
@@ -871,7 +1202,13 @@ mod tests {
             version: 1,
             profiles: vec![minimal_profile("p1")],
         };
-        let plan = build_job_plan(&cfg, Path::new("out"), &RunOptions::default()).unwrap();
+        let plan = build_job_plan(
+            &cfg,
+            Path::new("config.json"),
+            Path::new("out"),
+            &RunOptions::default(),
+        )
+        .unwrap();
         assert_eq!(plan.jobs[0].status, JobStatus::MissingRange);
     }
 
@@ -892,10 +1229,10 @@ mod tests {
     fn execute_job_writes_importable_bin() {
         let tmp = tempfile::tempdir().unwrap();
         let profile = smoke_profile();
+        let ranges = smoke_ranges();
         let flop = [48, 32, 16];
-        let mut job =
-            JobManifestEntry::planned(&profile, flop, output_path(tmp.path(), &profile, flop));
-        execute_job(&profile, flop, &mut job, true).unwrap();
+        let mut job = JobManifestEntry::planned(&profile, Some(&ranges), flop, tmp.path());
+        execute_job(&profile, &ranges, flop, &mut job, true).unwrap();
         assert_eq!(job.status, JobStatus::Solved);
         let (_game, _memo): (postflop_solver::PostFlopGame, _) =
             postflop_solver::load_data_from_file(job.path.as_ref().unwrap(), None).unwrap();
@@ -905,10 +1242,10 @@ mod tests {
     fn execute_job_reports_actual_iterations_completed() {
         let tmp = tempfile::tempdir().unwrap();
         let profile = smoke_profile();
+        let ranges = smoke_ranges();
         let flop = [48, 32, 16];
-        let mut job =
-            JobManifestEntry::planned(&profile, flop, output_path(tmp.path(), &profile, flop));
-        execute_job(&profile, flop, &mut job, true).unwrap();
+        let mut job = JobManifestEntry::planned(&profile, Some(&ranges), flop, tmp.path());
+        execute_job(&profile, &ranges, flop, &mut job, true).unwrap();
         assert_eq!(job.iterations_completed, 0);
     }
 
@@ -916,6 +1253,8 @@ mod tests {
     fn run_dry_run_writes_manifest_with_planned_jobs() {
         let tmp = tempfile::tempdir().unwrap();
         let config_path = tmp.path().join("config.json");
+        std::fs::write(tmp.path().join("oop.txt"), "AA").unwrap();
+        std::fs::write(tmp.path().join("ip.txt"), "KK").unwrap();
         std::fs::write(
             &config_path,
             serde_json::to_string(&TrainingConfig {
@@ -938,5 +1277,17 @@ mod tests {
         run_cli(opts).unwrap();
         let manifest = std::fs::read_to_string(tmp.path().join("out/manifest.json")).unwrap();
         assert!(manifest.contains("\"status\": \"planned\""));
+        let tmp_manifest_count = std::fs::read_dir(tmp.path().join("out"))
+            .unwrap()
+            .filter(|entry| {
+                entry
+                    .as_ref()
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("manifest.json.tmp.")
+            })
+            .count();
+        assert_eq!(tmp_manifest_count, 0);
     }
 }
