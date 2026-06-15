@@ -19,7 +19,7 @@ The server owns all solver state in memory and exposes it through `/api/*`. The 
 
 - Pixi
 - The sibling solver checkout at `../postflop-solver`
-- macOS Apple silicon for the checked-in Pixi platform (`osx-arm64`)
+- macOS Apple silicon or Linux x86_64 for the checked-in Pixi platforms (`osx-arm64`, `linux-64`)
 
 Install the local Node/Rust environment and npm dependencies:
 
@@ -51,6 +51,8 @@ pixi run frontend-dev
 ```
 
 Open the Vite URL printed by `frontend-dev`. Vite proxies `/api` requests to `http://127.0.0.1:3000`.
+
+The frontend dev server listens on `0.0.0.0:30000`, so it can be reached from another machine through the Linux host's IP address, for example `http://<linux-host-ip>:30000`.
 
 ## Production-Style Local Run
 
