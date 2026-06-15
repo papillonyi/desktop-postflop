@@ -153,7 +153,7 @@ export function TreeConfig() {
 
   const sanitized = useMemo(() => {
     const result = new Map<string, { s: string; valid: boolean }>();
-    for (const [field, _label, isRaise] of betFields) {
+    for (const [field, , isRaise] of betFields) {
       result.set(field, sanitizeBetString(String(config[field]), isRaise));
     }
     return result;
@@ -188,7 +188,7 @@ export function TreeConfig() {
 
   const errorOop = useMemo(() => {
     const errors: string[] = [];
-    for (const [field, label, _isRaise, isDonk] of betFields.slice(0, 8)) {
+    for (const [field, label, , isDonk] of betFields.slice(0, 8)) {
       const res = sanitized.get(field)!;
       if (!res.valid && (!isDonk || config.donkOption)) {
         errors.push(`${label}: ${res.s}`);
@@ -357,7 +357,7 @@ export function TreeConfig() {
       removedLines: String(configValue.removedLines),
     };
 
-    for (const [field, _label, isRaise] of betFields) {
+    for (const [field, , isRaise] of betFields) {
       const str = String(configValue[field as keyof ConfigValue] ?? "");
       const res = sanitizeBetString(str, isRaise);
       patch[field] = res.valid ? res.s : str;

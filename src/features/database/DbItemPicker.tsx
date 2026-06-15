@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DbGroup, DbItem } from "../../db";
 import * as db from "../../db";
 
@@ -84,13 +84,13 @@ export function DbItemPicker({
     [records, selectedPath]
   );
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setRecords(await db.getArray(storeName));
-  };
+  }, [storeName]);
 
   useEffect(() => {
     refresh();
-  }, [storeName]);
+  }, [refresh]);
 
   const fail = (message: string) => {
     setError(message);

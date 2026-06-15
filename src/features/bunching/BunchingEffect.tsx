@@ -116,13 +116,13 @@ export function BunchingEffect() {
     await updateRangeLocal(player);
   };
 
-  const resumePrecomputation = async () => {
+  const resumePrecomputation = async (currentFlop = flopCopy) => {
     dispatch(setBunchingRunning(true));
     setIsBunchingPaused(false);
     startTime.current = performance.now();
     await invokes.setNumThreads(numThreads);
 
-    while (true) {
+    for (;;) {
       if (terminateFlag.current) {
         await invokes.bunchingClear();
         dispatch(setBunchingFlop([]));
@@ -139,7 +139,7 @@ export function BunchingEffect() {
       const [phase, percent] = await invokes.bunchingProgress();
 
       if (phase === 3 && percent === 100) {
-        dispatch(setBunchingFlop(flopCopy));
+        dispatch(setBunchingFlop(currentFlop));
         setStatusText("Bunching data ready!");
         break;
       }
@@ -176,10 +176,11 @@ export function BunchingEffect() {
     }
 
     setStatusText("Phase 1/3 - Preparing...");
-    setFlopCopy(config.board.slice(0, 3));
+    const currentFlop = config.board.slice(0, 3);
+    setFlopCopy(currentFlop);
     setHasBunchingRun(true);
     setElapsedTimeMs(0);
-    await resumePrecomputation();
+    await resumePrecomputation(currentFlop);
   };
 
   const clearPrecomputation = async () => {
@@ -342,7 +343,7 @@ export function BunchingEffect() {
                   numThreads > 64 ||
                   numThreads % 1 !== 0
                 }
-                onClick={resumePrecomputation}
+                onClick={() => resumePrecomputation()}
                 type="button"
               >
                 Resume

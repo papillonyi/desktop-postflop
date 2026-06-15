@@ -187,7 +187,7 @@ export function RunSolver() {
   const exploitabilityText = Number.isFinite(exploitability)
     ? `Exploitability: ${exploitability.toFixed(2)} (${(
         (exploitability * 100) /
-        config.startingPot
+        savedConfig.startingPot
       ).toFixed(2)}%)`
     : "";
   const timeText =
@@ -268,7 +268,10 @@ export function RunSolver() {
     dispatch(setSolverError(false));
   };
 
-  const resumeSolver = async () => {
+  const resumeSolver = async (
+    startingIteration = currentIteration,
+    startingExploitability = exploitability
+  ) => {
     dispatch(setSolverRunning(true));
     dispatch(setSolverPaused(false));
 
@@ -277,9 +280,9 @@ export function RunSolver() {
       await invokes.setNumThreads(numThreads);
     }
 
-    const target = (config.startingPot * targetExploitability) / 100;
-    let iteration = currentIteration;
-    let exploit = exploitability;
+    const target = (savedConfig.startingPot * targetExploitability) / 100;
+    let iteration = startingIteration;
+    let exploit = startingExploitability;
 
     while (
       !terminateFlag.current &&
@@ -357,7 +360,7 @@ export function RunSolver() {
     );
     setExploitability(initialExploitability);
     exploitabilityUpdated.current = true;
-    await resumeSolver();
+    await resumeSolver(0, initialExploitability);
   };
 
   const saveGame = async () => {
@@ -570,7 +573,7 @@ export function RunSolver() {
                     maxIterations % 1 !== 0 ||
                     maxIterations > 100000
                   }
-                  onClick={resumeSolver}
+                  onClick={() => resumeSolver()}
                   type="button"
                 >
                   Resume

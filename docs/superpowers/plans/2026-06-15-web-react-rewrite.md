@@ -66,18 +66,18 @@
 
 - [x] Port result viewer shell.
 - [x] Port result navigation tree and chance card interactions.
-- [ ] Port basics, graphs, compare, middle controls, chance chart, and result table.
+- [x] Port basics, graphs, compare, middle controls, chance chart, and result table.
 - [x] Preserve CSV export behavior.
 - [x] Run `pixi run lint`, `pixi run frontend-build`, and `pixi run server-check`.
-- [ ] Commit with `port results views to react`.
+- [x] Commit with `port results views to react`.
 
 ## Task 6: Cleanup And Verification
 
-- [ ] Remove remaining Vue files and imports.
-- [ ] Confirm `rg -n "vue|pinia|\\.vue|@heroicons/vue|vue-chartjs|vue-tippy" src package.json vite.config.ts .eslintrc.cjs tsconfig.json` has no unintended runtime references.
-- [ ] Run Prettier.
-- [ ] Run `pixi run lint`.
-- [ ] Run `pixi run frontend-build`.
-- [ ] Run `pixi run server-check`.
-- [ ] Start `pixi run server-dev` and smoke-test HTTP/static serving.
-- [ ] Commit with `finish react web rewrite`.
+- [x] Remove remaining Vue files and imports.
+- [x] Confirm `rg -n "vue|pinia|\\.vue|@heroicons/vue|vue-chartjs|vue-tippy" src package.json vite.config.ts .eslintrc.cjs tsconfig.json` has no unintended runtime references.
+- [x] Run Prettier.
+- [x] Run `pixi run lint`.
+- [x] Run `pixi run frontend-build`.
+- [x] Run `pixi run server-check`.
+- [x] Start `pixi run server-dev` and smoke-test HTTP/static serving.
+- [x] Commit with `finish react web rewrite`.

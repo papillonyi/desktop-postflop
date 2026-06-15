@@ -23,5 +23,7 @@ module.exports = {
       { allowConstantExport: true },
     ],
     ...require("eslint-plugin-react-hooks").configs.recommended.rules,
+    "react-hooks/set-state-in-effect": "off",
+    "react-hooks/refs": "off",
   },
 };

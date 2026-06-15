@@ -19,7 +19,7 @@ pub use app_state::SharedAppState;
 pub fn app_with_state(state: SharedAppState) -> Router {
     let dist_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../dist");
     let static_files =
-        ServeDir::new(&dist_dir).not_found_service(ServeFile::new(dist_dir.join("index.html")));
+        ServeDir::new(&dist_dir).fallback(ServeFile::new(dist_dir.join("index.html")));
 
     Router::new()
         .route("/api/health", get(health))

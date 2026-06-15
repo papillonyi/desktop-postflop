@@ -441,6 +441,8 @@ export function TreeEditor({ onCancel, onSave }: TreeEditorProps) {
     return () => {
       cancelled = true;
     };
+    // Tree editing works from the config snapshot captured when editor opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (isLoading) return <div>Loading...</div>;

@@ -1,9 +1,4 @@
-import { invoke } from "@tauri-apps/api";
 import { ChanceReports, Results } from "./result-types";
-import { message } from "@tauri-apps/api/dialog";
-
-const isTauri = () =>
-  typeof window !== "undefined" && "__TAURI_IPC__" in window;
 
 const API_BASE = "/api";
 
@@ -64,7 +59,6 @@ async function pickAndUploadGameFile() {
 }
 
 export const osName = async (): Promise<"windows" | "macos" | "linux"> => {
-  if (isTauri()) return await invoke("os_name");
   const { os_name } = await apiGet<{ os_name: "windows" | "macos" | "linux" }>(
     "/system/os-name"
   );
@@ -72,7 +66,6 @@ export const osName = async (): Promise<"windows" | "macos" | "linux"> => {
 };
 
 export const memory = async (): Promise<number[]> => {
-  if (isTauri()) return await invoke("memory");
   const resp = await apiGet<{ available: number; total: number }>(
     "/system/memory"
   );
@@ -80,34 +73,21 @@ export const memory = async (): Promise<number[]> => {
 };
 
 export const setNumThreads = async (numThreads: number) => {
-  if (isTauri()) {
-    await invoke("set_num_threads", { numThreads });
-    return;
-  }
   await apiPost("/system/threads", { num_threads: numThreads });
 };
 
 /* Ranges */
 
 export const rangeNumCombos = async (player: number): Promise<number> => {
-  if (isTauri()) return await invoke("range_num_combos", { player });
   const resp = await apiGet<ValueResp<number>>(`/range/${player}/num-combos`);
   return resp.value;
 };
 
 export const rangeClear = async (player: number) => {
-  if (isTauri()) {
-    await invoke("range_clear", { player });
-    return;
-  }
   await apiPost(`/range/${player}/clear`);
 };
 
 export const rangeInvert = async (player: number) => {
-  if (isTauri()) {
-    await invoke("range_invert", { player });
-    return;
-  }
   await apiPost(`/range/${player}/invert`);
 };
 
@@ -117,10 +97,6 @@ export const rangeUpdate = async (
   col: number,
   weight: number
 ) => {
-  if (isTauri()) {
-    await invoke("range_update", { player, row, col, weight });
-    return;
-  }
   await apiPost(`/range/${player}/update`, { row, col, weight });
 };
 
@@ -128,7 +104,6 @@ export const rangeFromString = async (
   player: number,
   str: string
 ): Promise<string | null> => {
-  if (isTauri()) return await invoke("range_from_string", { player, str });
   const resp = await apiPost<{ error: string | null }>(
     `/range/${player}/from-string`,
     {
@@ -139,19 +114,16 @@ export const rangeFromString = async (
 };
 
 export const rangeToString = async (player: number): Promise<string> => {
-  if (isTauri()) return await invoke("range_to_string", { player });
   const resp = await apiGet<ValueResp<string>>(`/range/${player}/to-string`);
   return resp.value;
 };
 
 export const rangeGetWeights = async (player: number): Promise<number[]> => {
-  if (isTauri()) return await invoke("range_get_weights", { player });
   const resp = await apiGet<ValueResp<number[]>>(`/range/${player}/weights`);
   return resp.value;
 };
 
 export const rangeRawData = async (player: number): Promise<number[]> => {
-  if (isTauri()) return await invoke("range_raw_data", { player });
   const resp = await apiGet<ValueResp<number[]>>(`/range/${player}/raw-data`);
   return resp.value;
 };
@@ -183,33 +155,6 @@ export const treeNew = async (
   addedLines: string,
   removedLines: string
 ): Promise<boolean> => {
-  if (isTauri()) {
-    return await invoke("tree_new", {
-      boardLen,
-      startingPot,
-      effectiveStack,
-      donkOption,
-      oopFlopBet,
-      oopFlopRaise,
-      oopTurnBet,
-      oopTurnRaise,
-      oopTurnDonk,
-      oopRiverBet,
-      oopRiverRaise,
-      oopRiverDonk,
-      ipFlopBet,
-      ipFlopRaise,
-      ipTurnBet,
-      ipTurnRaise,
-      ipRiverBet,
-      ipRiverRaise,
-      addAllinThreshold,
-      forceAllinThreshold,
-      mergingThreshold,
-      addedLines,
-      removedLines,
-    });
-  }
   const resp = await apiPost<ValueResp<boolean>>("/tree/new", {
     board_len: boardLen,
     starting_pot: startingPot,
@@ -239,65 +184,49 @@ export const treeNew = async (
 };
 
 export const treeAddedLines = async (): Promise<string> => {
-  if (isTauri()) return await invoke("tree_added_lines");
   const resp = await apiGet<ValueResp<string>>("/tree/added-lines");
   return resp.value;
 };
 
 export const treeRemovedLines = async (): Promise<string> => {
-  if (isTauri()) return await invoke("tree_removed_lines");
   const resp = await apiGet<ValueResp<string>>("/tree/removed-lines");
   return resp.value;
 };
 
 export const treeInvalidTerminals = async (): Promise<string> => {
-  if (isTauri()) return await invoke("tree_invalid_terminals");
   const resp = await apiGet<ValueResp<string>>("/tree/invalid-terminals");
   return resp.value;
 };
 
 export const treeActions = async (): Promise<string[]> => {
-  if (isTauri()) return await invoke("tree_actions");
   const resp = await apiGet<ValueResp<string[]>>("/tree/actions");
   return resp.value;
 };
 
 export const treeIsTerminalNode = async (): Promise<boolean> => {
-  if (isTauri()) return await invoke("tree_is_terminal_node");
   const resp = await apiGet<ValueResp<boolean>>("/tree/terminal-node");
   return resp.value;
 };
 
 export const treeIsChanceNode = async (): Promise<boolean> => {
-  if (isTauri()) return await invoke("tree_is_chance_node");
   const resp = await apiGet<ValueResp<boolean>>("/tree/chance-node");
   return resp.value;
 };
 
 export const treeBackToRoot = async () => {
-  if (isTauri()) {
-    await invoke("tree_back_to_root");
-    return;
-  }
   await apiPost("/tree/back-to-root");
 };
 
 export const treeApplyHistory = async (line: string[]) => {
-  if (isTauri()) {
-    await invoke("tree_apply_history", { line });
-    return;
-  }
   await apiPost("/tree/apply-history", { line });
 };
 
 export const treePlay = async (action: string): Promise<number> => {
-  if (isTauri()) return await invoke("tree_play", { action });
   const resp = await apiPost<ValueResp<number>>("/tree/play", { action });
   return resp.value;
 };
 
 export const treeTotalBetAmount = async (): Promise<number[]> => {
-  if (isTauri()) return await invoke("tree_total_bet_amount");
   const resp = await apiGet<ValueResp<[number, number]>>(
     "/tree/total-bet-amount"
   );
@@ -305,55 +234,33 @@ export const treeTotalBetAmount = async (): Promise<number[]> => {
 };
 
 export const treeAddBetAction = async (amount: number, isRaise: boolean) => {
-  if (isTauri()) {
-    await invoke("tree_add_bet_action", { amount, isRaise });
-    return;
-  }
   await apiPost("/tree/add-bet-action", { amount, is_raise: isRaise });
 };
 
 export const treeRemoveCurrentNode = async () => {
-  if (isTauri()) {
-    await invoke("tree_remove_current_node");
-    return;
-  }
   await apiPost("/tree/remove-current-node");
 };
 
 export const treeDeleteAddedLine = async (line: string) => {
-  if (isTauri()) {
-    await invoke("tree_delete_added_line", { line });
-    return;
-  }
   await apiPost("/tree/delete-added-line", { line });
 };
 
 export const treeDeleteRemovedLine = async (line: string) => {
-  if (isTauri()) {
-    await invoke("tree_delete_removed_line", { line });
-    return;
-  }
   await apiPost("/tree/delete-removed-line", { line });
 };
 
 /* Bunching effect */
 
 export const bunchingInit = async (board: number[]): Promise<string | null> => {
-  if (isTauri()) return await invoke("bunching_init", { board });
   const resp = await apiPost<string | null>("/bunching/init", { board });
   return resp;
 };
 
 export const bunchingClear = async () => {
-  if (isTauri()) {
-    await invoke("bunching_clear");
-    return;
-  }
   await apiPost("/bunching/clear");
 };
 
 export const bunchingProgress = async (): Promise<number[]> => {
-  if (isTauri()) return await invoke("bunching_progress");
   const resp = await apiGet<ValueResp<[number, number]>>("/bunching/progress");
   return resp.value as unknown as number[];
 };
@@ -387,35 +294,6 @@ export const gameInit = async (
   addedLines: string,
   removedLines: string
 ): Promise<string | null> => {
-  if (isTauri()) {
-    return await invoke("game_init", {
-      board,
-      startingPot,
-      effectiveStack,
-      rakeRate,
-      rakeCap,
-      donkOption,
-      oopFlopBet,
-      oopFlopRaise,
-      oopTurnBet,
-      oopTurnRaise,
-      oopTurnDonk,
-      oopRiverBet,
-      oopRiverRaise,
-      oopRiverDonk,
-      ipFlopBet,
-      ipFlopRaise,
-      ipTurnBet,
-      ipTurnRaise,
-      ipRiverBet,
-      ipRiverRaise,
-      addAllinThreshold,
-      forceAllinThreshold,
-      mergingThreshold,
-      addedLines,
-      removedLines,
-    });
-  }
   return await apiPost<string | null>("/game/init", {
     board,
     starting_pot: startingPot,
@@ -446,72 +324,50 @@ export const gameInit = async (
 };
 
 export const gamePrivateCards = async (): Promise<number[][]> => {
-  if (isTauri()) return await invoke("game_private_cards");
   const resp = await apiGet<ValueResp<number[][]>>("/game/private-cards");
   return resp.value;
 };
 
 export const gameMemoryUsage = async (): Promise<number[]> => {
-  if (isTauri()) return await invoke("game_memory_usage");
   const resp = await apiGet<ValueResp<[number, number]>>("/game/memory-usage");
   return resp.value as unknown as number[];
 };
 
 export const gameMemoryUsageBunching = async (): Promise<number> => {
-  if (isTauri()) return await invoke("game_memory_usage_bunching");
   const resp = await apiGet<ValueResp<number>>("/game/memory-usage-bunching");
   return resp.value;
 };
 
 export const gameAllocateMemory = async (enableCompression: boolean) => {
-  if (isTauri()) {
-    await invoke("game_allocate_memory", { enableCompression });
-    return;
-  }
   await apiPost("/game/allocate-memory", {
     enable_compression: enableCompression,
   });
 };
 
 export const gameSetBunching = async (): Promise<string | null> => {
-  if (isTauri()) return await invoke("game_set_bunching");
   return await apiPost<string | null>("/game/set-bunching");
 };
 
 export const gameSolveStep = async (currentIteration: number) => {
-  if (isTauri()) {
-    await invoke("game_solve_step", { currentIteration });
-    return;
-  }
   await apiPost("/game/solve-step", currentIteration);
 };
 
 export const gameExploitability = async (): Promise<number> => {
-  if (isTauri()) return await invoke("game_exploitability");
   const resp = await apiGet<ValueResp<number>>("/game/exploitability");
   return resp.value;
 };
 
 export const gameFinalize = async () => {
-  if (isTauri()) {
-    await invoke("game_finalize");
-    return;
-  }
   await apiPost("/game/finalize");
 };
 
 export const gameApplyHistory = async (history: number[]) => {
-  if (isTauri()) {
-    await invoke("game_apply_history", { history });
-    return;
-  }
   await apiPost("/game/apply-history", { history });
 };
 
 export const gameTotalBetAmount = async (
   append: number[]
 ): Promise<number[]> => {
-  if (isTauri()) return await invoke("game_total_bet_amount", { append });
   const resp = await apiPost<ValueResp<[number, number]>>(
     "/game/total-bet-amount",
     {
@@ -522,7 +378,6 @@ export const gameTotalBetAmount = async (
 };
 
 export const gameActionsAfter = async (append: number[]): Promise<string[]> => {
-  if (isTauri()) return await invoke("game_actions_after", { append });
   const resp = await apiPost<ValueResp<string[]>>("/game/actions-after", {
     append,
   });
@@ -530,7 +385,6 @@ export const gameActionsAfter = async (append: number[]): Promise<string[]> => {
 };
 
 export const gamePossibleCards = async (): Promise<bigint> => {
-  if (isTauri()) return BigInt(await invoke("game_possible_cards"));
   const resp = await apiGet<ValueResp<number>>("/game/possible-cards");
   return BigInt(resp.value);
 };
@@ -550,22 +404,6 @@ type ResultsResponse = {
 };
 
 export const gameGetResults = async (): Promise<Results> => {
-  if (isTauri()) {
-    const results: ResultsResponse = await invoke("game_get_results");
-    return {
-      currentPlayer: results.current_player,
-      numActions: results.num_actions,
-      isEmpty: results.is_empty,
-      eqrBase: results.eqr_base,
-      weights: results.weights,
-      normalizer: results.normalizer,
-      equity: results.equity,
-      ev: results.ev,
-      eqr: results.eqr,
-      strategy: results.strategy,
-      actionEv: results.action_ev,
-    };
-  }
   const results: ResultsResponse = await apiGet("/game/results");
   return {
     currentPlayer: results.current_player,
@@ -596,26 +434,6 @@ export const gameGetChanceReports = async (
   currentPlayer: "oop" | "ip" | "terminal",
   numActions: number
 ): Promise<ChanceReports> => {
-  if (isTauri()) {
-    const reports: ChanceReportsResponse = await invoke(
-      "game_get_chance_reports",
-      {
-        append,
-        numActions,
-      }
-    );
-    return {
-      currentPlayer,
-      numActions,
-      status: reports.status,
-      combos: reports.combos,
-      equity: reports.equity,
-      ev: reports.ev,
-      eqr: reports.eqr,
-      strategy: reports.strategy,
-    };
-  }
-
   const reports: ChanceReportsResponse = await apiPost("/game/chance-reports", {
     append,
     num_actions: numActions,
@@ -633,12 +451,6 @@ export const gameGetChanceReports = async (
 };
 
 export const saveGameToBin = async (path: string) => {
-  if (isTauri()) {
-    await invoke("save_game_to_bin", { path });
-    await message("finish saved", "Tauri");
-    return;
-  }
-
   const blob = await apiGetBlob("/game/file");
   const downloadUrl = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -649,19 +461,11 @@ export const saveGameToBin = async (path: string) => {
 };
 
 export const loadGameFromBin = async (path: string) => {
-  if (isTauri()) {
-    await invoke("load_game_from_bin", { path });
-    await message("finish load", "Tauri");
-    return;
-  }
+  void path;
   await pickAndUploadGameFile();
 };
 
 export const loadBoardFromGame = async (): Promise<number[]> => {
-  if (isTauri()) {
-    await message("load board", "Tauri");
-    return await invoke("load_board_from_bin");
-  }
   const resp = await apiGet<ValueResp<number[]>>("/game/load-board");
   return resp.value;
 };
