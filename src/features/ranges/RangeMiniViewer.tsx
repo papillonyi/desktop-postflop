@@ -3,10 +3,16 @@ import { useAppSelector } from "../../app/hooks";
 const yellow500 = "#eab308";
 
 type RangeMiniViewerProps = {
+  className?: string;
+  onClick?: () => void;
   player: number;
 };
 
-export function RangeMiniViewer({ player }: RangeMiniViewerProps) {
+export function RangeMiniViewer({
+  className = "",
+  onClick,
+  player,
+}: RangeMiniViewerProps) {
   const range = useAppSelector((state) => state.ranges.values[player]);
 
   const cellValue = (row: number, col: number) => {
@@ -15,7 +21,7 @@ export function RangeMiniViewer({ player }: RangeMiniViewerProps) {
   };
 
   return (
-    <table className="shadow-md">
+    <table className={`shadow-md ${className}`} onClick={onClick}>
       <tbody>
         {Array.from({ length: 13 }, (_, rowIndex) => {
           const row = rowIndex + 1;

@@ -56,10 +56,10 @@
 
 ## Task 4: Bunching And Solver Run Views
 
-- [ ] Port bunching effect UI and polling workflow.
-- [ ] Port run solver UI, tree build, memory allocation, solve loop, pause/resume/terminate, finalize, and game save/load.
-- [ ] Preserve browser-compatible file flows.
-- [ ] Run `pixi run lint`, `pixi run frontend-build`, and `pixi run server-check`.
+- [x] Port bunching effect UI and polling workflow.
+- [x] Port run solver UI, tree build, memory allocation, solve loop, pause/resume/terminate, finalize, and game save/load.
+- [x] Preserve browser-compatible file flows.
+- [x] Run `pixi run lint`, `pixi run frontend-build`, and `pixi run server-check`.
 - [ ] Commit with `port solver execution views to react`.
 
 ## Task 5: Results Views
