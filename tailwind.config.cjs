@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: ["src/**/*.ts", "src/**/*.vue"],
+  content: ["./index.html", "./src/**/*.tsx"],
+  safelist: ["text-green-600", "text-blue-600", "text-pink-600", "text-black"],
   plugins: [require("@tailwindcss/forms")],
 };
