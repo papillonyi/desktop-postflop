@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::ffi::OsString;
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
@@ -206,6 +207,7 @@ pub struct JobManifestEntry {
     pub starting_pot: i32,
     pub effective_stack: i32,
     pub tree_preset: String,
+    pub profile_fingerprint: String,
     pub target_exploitability: f32,
     pub max_iterations: u32,
     pub iterations_completed: u32,
@@ -228,6 +230,7 @@ impl JobManifestEntry {
             starting_pot: profile.starting_pot,
             effective_stack: profile.effective_stack,
             tree_preset: profile.tree_preset.clone(),
+            profile_fingerprint: profile_fingerprint(profile),
             target_exploitability: profile.target_exploitability,
             max_iterations: profile.max_iterations,
             iterations_completed: 0,
@@ -306,13 +309,53 @@ pub fn flop_to_string(flop: [u8; 3]) -> String {
 }
 
 pub fn output_path(output_dir: &Path, profile: &TrainingProfile, flop: [u8; 3]) -> PathBuf {
+    let fingerprint = profile_fingerprint(profile);
     output_dir.join(&profile.id).join(format!(
-        "{}__flop_{}__pot{}__stack{}.bin",
+        "{}__cfg{}__flop_{}__pot{}__stack{}.bin",
         profile.id,
+        fingerprint,
         flop_to_string(flop),
         profile.starting_pot,
         profile.effective_stack
     ))
+}
+
+pub fn profile_fingerprint(profile: &TrainingProfile) -> String {
+    let mut payload = String::new();
+    append_fingerprint_field(&mut payload, "id", &profile.id);
+    append_fingerprint_field(&mut payload, "pot_type", &profile.pot_type);
+    append_fingerprint_field(&mut payload, "oop_position", &profile.oop_position);
+    append_fingerprint_field(&mut payload, "ip_position", &profile.ip_position);
+    append_fingerprint_field(&mut payload, "starting_pot", profile.starting_pot);
+    append_fingerprint_field(&mut payload, "effective_stack", profile.effective_stack);
+    append_fingerprint_field(&mut payload, "rake_rate_bits", profile.rake_rate.to_bits());
+    append_fingerprint_field(&mut payload, "rake_cap_bits", profile.rake_cap.to_bits());
+    append_fingerprint_field(&mut payload, "oop_range", profile.oop_range.trim());
+    append_fingerprint_field(&mut payload, "ip_range", profile.ip_range.trim());
+    append_fingerprint_field(&mut payload, "tree_preset", &profile.tree_preset);
+    append_fingerprint_field(
+        &mut payload,
+        "target_exploitability_bits",
+        profile.target_exploitability.to_bits(),
+    );
+    append_fingerprint_field(&mut payload, "max_iterations", profile.max_iterations);
+    append_fingerprint_field(
+        &mut payload,
+        "enable_compression",
+        profile.enable_compression,
+    );
+
+    let mut hash = 0xcbf2_9ce4_8422_2325u64;
+    for byte in payload.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+
+    format!("{hash:016x}")
+}
+
+fn append_fingerprint_field<T: std::fmt::Display>(payload: &mut String, key: &str, value: T) {
+    let _ = writeln!(payload, "{key}={value}");
 }
 
 pub fn build_job_plan(
@@ -497,10 +540,11 @@ pub fn execute_job(
     }
 
     let memo = format!(
-        "profile={},spot={},flop={}",
+        "profile={},spot={},flop={},profile_fingerprint={}",
         profile.id,
         profile.spot,
-        flop_to_string(flop)
+        flop_to_string(flop),
+        profile_fingerprint(profile)
     );
     save_data_to_file(&game, &memo, &path, None)
         .map_err(|err| format!("failed to save {}: {err}", path.display()))?;
@@ -800,12 +844,25 @@ mod tests {
         let profile = runnable_profile("2bp_btn_vs_bb_100bb");
         let flop = [51, 21, 0];
         let path = output_path(Path::new("training-games"), &profile, flop);
+        let fingerprint = profile_fingerprint(&profile);
         assert_eq!(
             path,
-            PathBuf::from(
-                "training-games/2bp_btn_vs_bb_100bb/2bp_btn_vs_bb_100bb__flop_2c7dAs__pot550__stack10000.bin"
-            )
+            PathBuf::from(format!(
+                "training-games/2bp_btn_vs_bb_100bb/2bp_btn_vs_bb_100bb__cfg{fingerprint}__flop_2c7dAs__pot550__stack10000.bin"
+            ))
         );
+    }
+
+    #[test]
+    fn output_path_changes_when_solver_inputs_change() {
+        let mut profile = runnable_profile("p1");
+        let flop = [51, 21, 0];
+        let original = output_path(Path::new("training-games"), &profile, flop);
+
+        profile.oop_range = "QQ".to_string();
+        let changed = output_path(Path::new("training-games"), &profile, flop);
+
+        assert_ne!(original, changed);
     }
 
     #[test]
