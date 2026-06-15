@@ -3,14 +3,10 @@
     windows_subsystem = "windows"
 )]
 
-mod bunching;
-mod range;
-mod solver;
-mod tree;
-use crate::bunching::*;
-use crate::range::*;
-use crate::solver::*;
-use crate::tree::*;
+use desktop_postflop::bunching::*;
+use desktop_postflop::range::*;
+use desktop_postflop::solver::*;
+use desktop_postflop::tree::*;
 
 use postflop_solver::*;
 use rayon::{ThreadPool, ThreadPoolBuilder};
@@ -71,7 +67,7 @@ fn main() {
             game_get_chance_reports,
             save_game_to_bin,
             load_game_from_bin,
-             load_board_from_bin
+            load_board_from_bin
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

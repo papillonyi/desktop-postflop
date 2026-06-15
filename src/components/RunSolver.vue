@@ -292,9 +292,9 @@
           </button>
 
           <button
-              :disabled="!store.hasSolverRun"
-              class="button-base button-blue"
-              @click="loadGame"
+            :disabled="!store.hasSolverRun"
+            class="button-base button-blue"
+            @click="loadGame"
           >
             Load
           </button>
