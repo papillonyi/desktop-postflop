@@ -65,10 +65,10 @@
 ## Task 5: Results Views
 
 - [x] Port result viewer shell.
-- [ ] Port result navigation tree and chance card interactions.
+- [x] Port result navigation tree and chance card interactions.
 - [ ] Port basics, graphs, compare, middle controls, chance chart, and result table.
-- [ ] Preserve CSV export behavior.
-- [ ] Run `pixi run lint`, `pixi run frontend-build`, and `pixi run server-check`.
+- [x] Preserve CSV export behavior.
+- [x] Run `pixi run lint`, `pixi run frontend-build`, and `pixi run server-check`.
 - [ ] Commit with `port results views to react`.
 
 ## Task 6: Cleanup And Verification
