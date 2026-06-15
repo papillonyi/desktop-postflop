@@ -38,20 +38,20 @@
 
 ## Task 2: Shared State And Routing
 
-- [ ] Create Redux store, typed hooks, and slices for app/config/config snapshots/ranges/results.
-- [ ] Implement React Router route map and redirects.
-- [ ] Port top nav, side nav, app layout, and About page.
-- [ ] Preserve the old solver section labels and active navigation behavior through routes.
-- [ ] Run `pixi run lint` and `pixi run frontend-build`.
+- [x] Create Redux store, typed hooks, and slices for app/config/config snapshots/ranges/results.
+- [x] Implement React Router route map and redirects.
+- [x] Port top nav, side nav, app layout, and About page.
+- [x] Preserve the old solver section labels and active navigation behavior through routes.
+- [x] Run `pixi run lint` and `pixi run frontend-build`.
 - [ ] Commit with `add react app state and routes`.
 
 ## Task 3: Setup Workflow Views
 
-- [ ] Port board selection components.
-- [ ] Port range editor and mini viewer.
+- [x] Port board selection components.
+- [x] Port range editor and mini viewer.
 - [ ] Port tree configuration validation and tree editor.
-- [ ] Port database item picker and browser JSON import/export.
-- [ ] Run `pixi run lint` and `pixi run frontend-build`.
+- [x] Port database item picker and browser JSON import/export.
+- [x] Run `pixi run lint` and `pixi run frontend-build`.
 - [ ] Commit with `port solver setup views to react`.
 
 ## Task 4: Bunching And Solver Run Views

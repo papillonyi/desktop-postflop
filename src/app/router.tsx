@@ -1,6 +1,8 @@
 import { createBrowserRouter, Navigate } from "react-router";
 import { App } from "./App";
 import { AboutPage } from "../features/about/AboutPage";
+import { BoardSelector } from "../features/board/BoardSelector";
+import { RangeEditor } from "../features/ranges/RangeEditor";
 import { PlaceholderPage } from "../shared/components/PlaceholderPage";
 
 export const router = createBrowserRouter([
@@ -11,13 +13,13 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="/solver/ranges/oop" replace /> },
       {
         path: "solver/ranges/oop",
-        element: <PlaceholderPage title="OOP Range" />,
+        element: <RangeEditor player={0} />,
       },
       {
         path: "solver/ranges/ip",
-        element: <PlaceholderPage title="IP Range" />,
+        element: <RangeEditor player={1} />,
       },
-      { path: "solver/board", element: <PlaceholderPage title="Board" /> },
+      { path: "solver/board", element: <BoardSelector /> },
       {
         path: "solver/tree",
         element: <PlaceholderPage title="Tree Configuration" />,
