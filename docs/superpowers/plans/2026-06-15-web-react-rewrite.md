@@ -64,7 +64,7 @@
 
 ## Task 5: Results Views
 
-- [ ] Port result viewer shell.
+- [x] Port result viewer shell.
 - [ ] Port result navigation tree and chance card interactions.
 - [ ] Port basics, graphs, compare, middle controls, chance chart, and result table.
 - [ ] Preserve CSV export behavior.

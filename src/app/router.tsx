@@ -4,9 +4,9 @@ import { AboutPage } from "../features/about/AboutPage";
 import { BoardSelector } from "../features/board/BoardSelector";
 import { BunchingEffect } from "../features/bunching/BunchingEffect";
 import { RangeEditor } from "../features/ranges/RangeEditor";
+import { ResultViewer } from "../features/results/ResultViewer";
 import { RunSolver } from "../features/solver/RunSolver";
 import { TreeConfig } from "../features/tree/TreeConfig";
-import { PlaceholderPage } from "../shared/components/PlaceholderPage";
 
 export const router = createBrowserRouter([
   {
@@ -35,7 +35,7 @@ export const router = createBrowserRouter([
         path: "solver/run",
         element: <RunSolver />,
       },
-      { path: "results", element: <PlaceholderPage title="Results" /> },
+      { path: "results", element: <ResultViewer /> },
       { path: "about", element: <AboutPage /> },
       { path: "*", element: <Navigate to="/solver/ranges/oop" replace /> },
     ],
