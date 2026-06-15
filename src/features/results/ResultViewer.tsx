@@ -1330,16 +1330,19 @@ function ResultNavigator({
     setSpots([...nextSpots]);
   };
 
-  const selectedChance =
-    selectedChanceIndex === -1
-      ? null
-      : (spots[selectedChanceIndex] as SpotChance);
-  const isSelectedChanceSkipped = selectedChance?.selectedIndex === -1;
-  const currentBoard = useMemo(() => {
+  const isSelectedChanceSkipped = () =>
+    selectedChanceIndexRef.current !== -1 &&
+    (spotsRef.current[selectedChanceIndexRef.current] as SpotChance)
+      ?.selectedIndex === -1;
+
+  const currentBoardFromRefs = () => {
     const board = [...config.board];
-    const endIndex = selectedChance ? selectedChanceIndex : selectedSpotIndex;
+    const endIndex =
+      selectedChanceIndexRef.current === -1
+        ? selectedSpotIndexRef.current
+        : selectedChanceIndexRef.current;
     for (let i = 3; i < endIndex; ++i) {
-      const spot = spots[i];
+      const spot = spotsRef.current[i];
       if (spot.type === "chance") {
         const card = spot.selectedIndex;
         if (card !== -1) board.push(card);
@@ -1347,13 +1350,7 @@ function ResultNavigator({
       }
     }
     return board;
-  }, [
-    config.board,
-    selectedChance,
-    selectedChanceIndex,
-    selectedSpotIndex,
-    spots,
-  ]);
+  };
 
   const spliceSpotsTerminal = (spotIndex: number) => {
     const results = resultsRef.current;
@@ -1502,7 +1499,7 @@ function ResultNavigator({
     if (!results) return;
     onUpdate({
       chanceReports: chanceReportsRef.current,
-      currentBoard,
+      currentBoard: currentBoardFromRefs(),
       results,
       selectedChance:
         selectedChanceIndexRef.current === -1
@@ -1527,7 +1524,7 @@ function ResultNavigator({
         ((spotIndex === selectedSpotIndexRef.current && !fromDeal) ||
           spotIndex === selectedChanceIndexRef.current ||
           (spotsRef.current[spotIndex]?.type === "chance" &&
-            isSelectedChanceSkipped &&
+            isSelectedChanceSkipped() &&
             spotIndex > selectedChanceIndexRef.current)))
     ) {
       return;
@@ -1539,6 +1536,63 @@ function ResultNavigator({
     }
 
     lockedRef.current = true;
+
+    if (fromDeal) {
+      const nextSpots = [...spotsRef.current];
+      const riverOffset = nextSpots
+        .slice(selectedChanceIndexRef.current + 3)
+        .findIndex((spot) => spot.type === "chance");
+      const riverIndex =
+        riverOffset === -1
+          ? -1
+          : riverOffset + selectedChanceIndexRef.current + 3;
+
+      selectedChanceIndexRef.current = -1;
+
+      if (riverIndex !== -1) {
+        const riverSpot = nextSpots[riverIndex] as SpotChance;
+        await invokes.gameApplyHistory(
+          nextSpots.slice(1, riverIndex).map((spot) => spot.selectedIndex)
+        );
+        const possibleCards = await invokes.gamePossibleCards();
+        let selectedIndex = riverSpot.selectedIndex;
+        const cards = riverSpot.cards.map((item) => {
+          const isDead = !(possibleCards & (1n << BigInt(item.card)));
+          if (item.card === selectedIndex && isDead) selectedIndex = -1;
+          return {
+            ...item,
+            isDead,
+            isSelected: item.card === selectedIndex,
+          };
+        });
+        nextSpots[riverIndex] = { ...riverSpot, cards, selectedIndex };
+      }
+
+      const riverSpot =
+        riverIndex === -1 ? null : (nextSpots[riverIndex] as SpotChance);
+      const riverSkipped = riverSpot?.selectedIndex === -1;
+      const lastIndex = nextSpots.length - 1;
+      const lastSpot = nextSpots[lastIndex];
+      if (
+        !riverSkipped &&
+        lastSpot?.type === "terminal" &&
+        lastSpot.equityOop !== 0 &&
+        lastSpot.equityOop !== 1
+      ) {
+        await invokes.gameApplyHistory(
+          nextSpots.slice(1, -1).map((spot) => spot.selectedIndex)
+        );
+        const terminalResults = await invokes.gameGetResults();
+        nextSpots[lastIndex] = {
+          ...lastSpot,
+          equityOop: terminalResults.isEmpty
+            ? -1
+            : average(terminalResults.equity[0], terminalResults.normalizer[0]),
+        };
+      }
+
+      setSpotsValue(nextSpots);
+    }
 
     if (!needSplice && spotsRef.current[spotIndex].type === "chance") {
       selectedChanceIndexRef.current = spotIndex;
