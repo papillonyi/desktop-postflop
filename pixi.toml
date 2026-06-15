@@ -13,7 +13,7 @@ server-check = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo check --manifes
 build = "RUSTFLAGS='-A dangerous_implicit_autorefs' npm run tauri build"
 frontend-build = "npm run build"
 lint = "npm run lint"
-format = "prettier --write src/**/*.{ts,vue}"
+format = "prettier --write src/**/*.{ts,tsx}"
 cargo-check = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo check --manifest-path src-tauri/Cargo.toml"
 solver-test = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo test --manifest-path ../postflop-solver/Cargo.toml"
 

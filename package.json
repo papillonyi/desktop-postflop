@@ -6,37 +6,43 @@
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc && vite build",
+    "build": "tsc && vite build",
     "tauri": "tauri",
-    "lint": "eslint src/**/*.{ts,vue}",
-    "format": "prettier --write src/**/*.{ts,vue}"
+    "lint": "eslint src/**/*.{ts,tsx}",
+    "format": "prettier --write src/**/*.{ts,tsx}"
   },
   "dependencies": {
-    "@heroicons/vue": "^2.0.18",
+    "@floating-ui/react": "^0.27.19",
+    "@heroicons/react": "^2.2.0",
+    "@reduxjs/toolkit": "^2.12.0",
     "@tauri-apps/api": "^1.5.0",
     "chart.js": "^4.4.0",
     "dexie": "^3.2.4",
-    "pinia": "^2.1.6",
-    "vue": "^3.3.4",
-    "vue-chartjs": "^5.2.0",
-    "vue-tippy": "^6.3.1"
+    "react": "^19.2.7",
+    "react-chartjs-2": "^5.3.1",
+    "react-dom": "^19.2.7",
+    "react-redux": "^9.3.0",
+    "react-router": "^7.17.0"
   },
   "devDependencies": {
     "@rushstack/eslint-patch": "^1.5.1",
     "@tailwindcss/forms": "^0.5.6",
     "@tauri-apps/cli": "^1.5.0",
     "@types/node": "^20.8.0",
-    "@vitejs/plugin-vue": "^4.3.4",
-    "@vue/eslint-config-prettier": "^8.0.0",
-    "@vue/eslint-config-typescript": "^12.0.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.16",
     "eslint": "^8.50.0",
-    "eslint-plugin-vue": "^9.17.0",
+    "eslint-config-prettier": "^9.1.2",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.4.20",
     "postcss": "^8.4.31",
     "prettier": "^3.0.3",
     "tailwindcss": "^3.3.3",
     "typescript": "^5.2.2",
-    "vite": "^4.4.9",
-    "vue-tsc": "^1.8.15"
+    "vite": "^4.4.9"
   }
 }

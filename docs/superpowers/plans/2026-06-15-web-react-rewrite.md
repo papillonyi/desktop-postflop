@@ -29,11 +29,11 @@
 
 ## Task 1: React Tooling Baseline
 
-- [ ] Add React, Router, Redux, chart, icon, and tooltip dependencies with npm.
-- [ ] Remove Vue, Pinia, Vue chart, Vue tooltip, Vue icon, and Vue ESLint dependencies.
-- [ ] Update Vite, TypeScript, ESLint, package scripts, and Pixi globs for React/TSX.
-- [ ] Create a minimal React entry and app shell that compiles.
-- [ ] Run `pixi run lint` and `pixi run frontend-build`.
+- [x] Add React, Router, Redux, chart, icon, and tooltip dependencies with npm.
+- [x] Remove Vue, Pinia, Vue chart, Vue tooltip, Vue icon, and Vue ESLint dependencies.
+- [x] Update Vite, TypeScript, ESLint, package scripts, and Pixi globs for React/TSX.
+- [x] Create a minimal React entry and app shell that compiles.
+- [x] Run `pixi run lint` and `pixi run frontend-build`.
 - [ ] Commit with `switch frontend tooling to react`.
 
 ## Task 2: Shared State And Routing
