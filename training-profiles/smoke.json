@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "id": "smoke_2bp_btn_vs_bb_100bb",
+      "enabled": true,
+      "weight": 1,
+      "spot": "Smoke BTN open vs BB call",
+      "potType": "2bp",
+      "oopPosition": "BB",
+      "ipPosition": "BTN",
+      "startingPot": 550,
+      "effectiveStack": 10000,
+      "rakeRate": 0.0,
+      "rakeCap": 0.0,
+      "oopRange": "AA",
+      "ipRange": "KK",
+      "treePreset": "standard_srp",
+      "flopCount": 1,
+      "seed": 1,
+      "targetExploitability": 10000.0,
+      "maxIterations": 1,
+      "enableCompression": false
+    }
+  ]
+}

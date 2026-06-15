@@ -12,6 +12,7 @@ server-dev = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo run --manifest-pa
 server-check = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo check --manifest-path src-tauri/Cargo.toml --bin web-server"
 server-build = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo build --manifest-path src-tauri/Cargo.toml --bin web-server --release"
 server-start = "src-tauri/target/release/web-server"
+training-precompute = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo run --manifest-path src-tauri/Cargo.toml --bin training-precompute --"
 build = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo build --manifest-path src-tauri/Cargo.toml --bin web-server --release"
 frontend-build = "npm run build"
 lint = "npm run lint"

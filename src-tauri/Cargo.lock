@@ -171,6 +171,7 @@ dependencies = [
  "postflop-solver",
  "rayon",
  "serde",
+ "serde_json",
  "sysinfo",
  "tempfile",
  "thiserror",
