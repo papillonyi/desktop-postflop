@@ -9,6 +9,9 @@ use std::sync::Arc;
 
 use crate::web::SharedAppState;
 
+#[derive(Default)]
+pub struct RangeManager(pub [Range; 6]);
+
 #[derive(Serialize)]
 pub struct NumCombosResponse {
     value: f64,

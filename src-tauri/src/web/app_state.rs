@@ -1,4 +1,4 @@
-use crate::{range::RangeManager, tree::default_action_tree};
+use crate::web::{range::RangeManager, tree::default_action_tree};
 use postflop_solver::{ActionTree, BunchingData, PostFlopGame};
 use rayon::ThreadPoolBuilder;
 use std::sync::Mutex;

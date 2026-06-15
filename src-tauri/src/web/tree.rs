@@ -1,6 +1,6 @@
 use crate::web::SharedAppState;
 use axum::{extract::Json, extract::State};
-use postflop_solver::Action;
+use postflop_solver::{Action, ActionTree, TreeConfig};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -73,6 +73,15 @@ fn decode_action(action: &str) -> Action {
             }
         }
     }
+}
+
+pub fn default_action_tree() -> ActionTree {
+    let tree_config = TreeConfig {
+        starting_pot: 1,
+        effective_stack: 1,
+        ..Default::default()
+    };
+    ActionTree::new(tree_config).unwrap()
 }
 
 #[derive(Serialize)]
