@@ -115,7 +115,7 @@ For a quick profile/path validation without generating `.bin` files:
 pixi run training-precompute-release --config training-profiles/6max-heads-up.json --out /tmp/desktop-postflop-6max-dry-run --dry-run --limit 3 --overwrite
 ```
 
-The precompute command prints per-job progress plus intra-job stages such as `build_tree`, `memory_estimate`, `allocate_memory`, `initial_exploitability`, and iteration starts/checkpoints. Intra-job stage lines include `elapsed_ms` from the start of that job. The training library manifest is written to `<out>/manifest.json`, and solved jobs are stored as `<out>/<potType>/<profileId>/*.bin`. The Training page defaults to `../training-games-dev`; pass a different root in the page input if you generated data elsewhere.
+The precompute command prints per-job progress plus intra-job stages such as `build_tree`, `memory_estimate`, `allocate_memory`, `initial_exploitability`, and iteration starts/checkpoints. Intra-job stage lines include `elapsed_ms` from the start of that job. The training library manifest is written to `<out>/manifest.json`, and solved jobs are stored as `<out>/<potType>/<profileId>/*.bin`. The Training page defaults to `../training-games-formal`; pass a different root in the page input if you generated data elsewhere.
 
 ## Checks
 

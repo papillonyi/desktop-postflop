@@ -13,7 +13,7 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const DEFAULT_TRAINING_ROOT: &str = "../training-games";
+const DEFAULT_TRAINING_ROOT: &str = "../training-games-formal";
 const SIX_MAX_POSITIONS: [&str; 6] = ["UTG", "MP", "CO", "BTN", "SB", "BB"];
 
 #[derive(Debug, Deserialize)]
@@ -993,6 +993,13 @@ mod tests {
 
         let resolved = resolve_root(Some("~/training-games-test")).unwrap();
         assert_eq!(resolved, PathBuf::from(home).join("training-games-test"));
+    }
+
+    #[test]
+    fn resolve_root_uses_formal_default() {
+        let current_dir = std::env::current_dir().unwrap();
+        let resolved = resolve_root(None).unwrap();
+        assert_eq!(resolved, current_dir.join("../training-games-formal"));
     }
 
     #[test]

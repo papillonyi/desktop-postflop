@@ -171,7 +171,7 @@ export function TrainingPage() {
   const automationInFlightRef = useRef(false);
   const actionInFlightRef = useRef(false);
 
-  const [root, setRoot] = useState("../training-games-dev");
+  const [root, setRoot] = useState("../training-games-formal");
   const [summary, setSummary] = useState<TrainingLibrarySummary | null>(null);
   const [heroPosition, setHeroPosition] = useState<TrainingPosition>("BTN");
   const [enabledPotTypes, setEnabledPotTypes] =
