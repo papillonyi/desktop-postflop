@@ -3,7 +3,7 @@ import {
   PlayIcon,
   ForwardIcon,
 } from "@heroicons/react/24/solid";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as invokes from "../../invokes";
 import type {
   TrainingLibrarySummary,
@@ -197,17 +197,6 @@ export function TrainingPage() {
   const isHeroTurn =
     Boolean(session && currentSpot?.player === session.heroPlayer) &&
     !navigatorUpdate?.selectedChance;
-
-  const heroActions = useMemo(() => {
-    if (!session || !navigatorUpdate || !currentSpot || !isHeroTurn) return [];
-    return exactActionDetails(
-      navigatorUpdate.results,
-      cards,
-      session.heroPlayer,
-      session.heroHand.index,
-      currentSpot.actions
-    );
-  }, [cards, currentSpot, isHeroTurn, navigatorUpdate, session]);
 
   const reloadLibrary = async () => {
     setLoadingLibrary(true);
@@ -514,7 +503,7 @@ export function TrainingPage() {
                     <div className="mt-4 flex flex-col gap-2">
                       {currentSpot.actions.map((action) => (
                         <button
-                          className="button-base button-blue flex items-center justify-between"
+                          className="button-base button-blue flex items-center justify-center"
                           key={action.index}
                           onClick={() =>
                             chooseHeroAction(currentSpot, action.index)
@@ -522,11 +511,6 @@ export function TrainingPage() {
                           type="button"
                         >
                           <span>{actionLabel(action)}</span>
-                          <span className="text-xs opacity-80">
-                            {formatEv(
-                              heroActions[action.index]?.ev ?? Number.NaN
-                            )}
-                          </span>
                         </button>
                       ))}
                     </div>
@@ -558,32 +542,51 @@ export function TrainingPage() {
           ) : (
             <div className="mt-4 flex flex-col gap-3">
               {decisionLog.map((decision, index) => (
-                <div className="rounded border border-gray-200 p-3" key={index}>
-                  <div className="text-sm font-semibold">
-                    {decision.position} {formatHand(decision.handCards)}
+                <article
+                  className="rounded border border-gray-200 bg-white p-3 shadow-sm"
+                  key={index}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-semibold uppercase text-gray-500">
+                        Decision {index + 1}
+                      </div>
+                      <div className="mt-1 text-sm font-semibold">
+                        {decision.position} {formatHand(decision.handCards)}
+                      </div>
+                    </div>
+                    <div className="rounded bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
+                      {decision.actionLabel}
+                    </div>
                   </div>
-                  <div className="mt-1 text-sm text-gray-600">
-                    {formatBoard(decision.board)}
+                  <div className="mt-2 text-xs text-gray-500">
+                    {decision.spot}
                   </div>
-                  <div className="mt-2 text-sm font-semibold">
-                    {decision.actionLabel}
+                  <div className="mt-1 text-xs text-gray-500">
+                    Board {formatBoard(decision.board)}
                   </div>
-                  <div className="mt-2 grid grid-cols-[1fr_4rem] gap-1 text-xs text-gray-600">
+                  <div className="mt-3 divide-y divide-gray-100 border-t border-gray-100 pt-2 text-xs">
                     {decision.actions.map((action) => (
                       <div
-                        className={
-                          action.isChosen ? "font-semibold text-blue-700" : ""
-                        }
+                        className={[
+                          "grid grid-cols-[minmax(0,1fr)_3.75rem_3.75rem] items-center gap-2 py-1.5",
+                          action.isChosen
+                            ? "font-semibold text-blue-700"
+                            : "text-gray-600",
+                        ].join(" ")}
                         key={action.actionIndex}
                       >
-                        {actionLabel(action)}
-                        <span className="float-right">
+                        <span className="truncate">{actionLabel(action)}</span>
+                        <span className="text-right">
                           {formatProbability(action.probability)}
+                        </span>
+                        <span className="text-right">
+                          {formatEv(action.ev)}
                         </span>
                       </div>
                     ))}
                   </div>
-                </div>
+                </article>
               ))}
             </div>
           )}
