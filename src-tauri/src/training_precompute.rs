@@ -691,7 +691,7 @@ pub fn tree_config_for_preset(
             "3x",
             "30%,80%,150%",
             "3x",
-            Some("30%,80%,150%"),
+            Some("50%"),
         ),
         "standard_3bp" => (
             "30%,80%,150%",
@@ -700,7 +700,7 @@ pub fn tree_config_for_preset(
             "3x",
             "30%,80%,150%",
             "3x",
-            Some("30%,80%,150%"),
+            Some("50%"),
         ),
         "standard_4bp" => (
             "30%,80%,150%",
@@ -709,7 +709,7 @@ pub fn tree_config_for_preset(
             "3x",
             "30%,80%,150%",
             "3x",
-            Some("30%,80%,150%"),
+            Some("50%"),
         ),
         "standard_dev" => ("50%", "3x", "50%", "3x", "50%", "3x", None),
         other => return Err(format!("unknown tree preset: {other}")),
@@ -787,7 +787,7 @@ fn execute_job_with_progress<W: IoWrite>(
         return Ok(());
     }
 
-    write_stage_progress(progress, job, "parse_ranges", "")?;
+    write_stage_progress(progress, job, &start, "parse_ranges", "")?;
     let oop_range = ranges
         .oop_range
         .parse()
@@ -807,6 +807,7 @@ fn execute_job_with_progress<W: IoWrite>(
     write_stage_progress(
         progress,
         job,
+        &start,
         "build_tree",
         &format!("preset={}", profile.tree_preset),
     )?;
@@ -831,6 +832,7 @@ fn execute_job_with_progress<W: IoWrite>(
     write_stage_progress(
         progress,
         job,
+        &start,
         "memory_estimate",
         &format!(
             "uncompressed={uncompressed_memory} compressed={compressed_memory} selected={selected_memory}"
@@ -839,17 +841,19 @@ fn execute_job_with_progress<W: IoWrite>(
     write_stage_progress(
         progress,
         job,
+        &start,
         "allocate_memory",
         &format!("compression={}", profile.enable_compression),
     )?;
     game.allocate_memory(profile.enable_compression);
-    write_stage_progress(progress, job, "allocated_memory", "")?;
+    write_stage_progress(progress, job, &start, "allocated_memory", "")?;
     let solve_report = solve_with_report_with_progress(
         &mut game,
         profile.max_iterations,
         profile.target_exploitability,
         progress,
         Some(&*job),
+        &start,
     )?;
 
     if let Some(parent) = path.parent() {
@@ -865,11 +869,17 @@ fn execute_job_with_progress<W: IoWrite>(
         job.profile_fingerprint,
         ranges.range_fingerprint
     );
-    write_stage_progress(progress, job, "save", &format!("output={}", path.display()))?;
+    write_stage_progress(
+        progress,
+        job,
+        &start,
+        "save",
+        &format!("output={}", path.display()),
+    )?;
     save_data_to_file(&game, &memo, &path, None)
         .map_err(|err| format!("failed to save {}: {err}", path.display()))?;
 
-    write_stage_progress(progress, job, "verify_saved_file", "")?;
+    write_stage_progress(progress, job, &start, "verify_saved_file", "")?;
     let (loaded, _memo): (PostFlopGame, _) = load_data_from_file(&path, None)
         .map_err(|err| format!("failed to verify saved file {}: {err}", path.display()))?;
     if loaded.card_config().flop != flop {
@@ -893,6 +903,7 @@ fn execute_job_with_progress<W: IoWrite>(
     write_stage_progress(
         progress,
         job,
+        &start,
         "job_complete",
         &format!("duration_ms={}", job.duration_ms.unwrap_or_default()),
     )?;
@@ -910,20 +921,23 @@ fn solve_with_report_with_progress<W: IoWrite>(
     target_exploitability: f32,
     progress: &mut W,
     job: Option<&JobManifestEntry>,
+    job_start: &Instant,
 ) -> Result<SolveReport, String> {
     let mut exploitability = compute_exploitability(&*game);
-    write_solve_progress(
+    write_timed_solve_progress(
         progress,
         job,
+        job_start,
         &format!("stage=initial_exploitability value={exploitability}"),
     )?;
     let mut iterations_completed = 0;
 
     for iteration in 0..max_iterations {
         if exploitability <= target_exploitability {
-            write_solve_progress(
+            write_timed_solve_progress(
                 progress,
                 job,
+                job_start,
                 &format!(
                     "stage=target_reached iterations={iterations_completed} exploitability={exploitability}"
                 ),
@@ -931,9 +945,10 @@ fn solve_with_report_with_progress<W: IoWrite>(
             break;
         }
 
-        write_solve_progress(
+        write_timed_solve_progress(
             progress,
             job,
+            job_start,
             &format!("iteration={}/{} stage=start", iteration + 1, max_iterations),
         )?;
         solve_step(&*game, iteration);
@@ -941,9 +956,10 @@ fn solve_with_report_with_progress<W: IoWrite>(
 
         if iterations_completed % 10 == 0 || iterations_completed == max_iterations {
             exploitability = compute_exploitability(&*game);
-            write_solve_progress(
+            write_timed_solve_progress(
                 progress,
                 job,
+                job_start,
                 &format!(
                     "iteration={iterations_completed}/{max_iterations} stage=checkpoint exploitability={exploitability}"
                 ),
@@ -951,7 +967,7 @@ fn solve_with_report_with_progress<W: IoWrite>(
         }
     }
 
-    write_solve_progress(progress, job, "stage=finalize")?;
+    write_timed_solve_progress(progress, job, job_start, "stage=finalize")?;
     finalize(game);
 
     Ok(SolveReport {
@@ -963,15 +979,30 @@ fn solve_with_report_with_progress<W: IoWrite>(
 fn write_stage_progress<W: IoWrite>(
     progress: &mut W,
     job: &JobManifestEntry,
+    job_start: &Instant,
     stage: &str,
     detail: &str,
 ) -> Result<(), String> {
+    let elapsed_ms = job_start.elapsed().as_millis();
     let message = if detail.is_empty() {
-        format!("stage={stage}")
+        format!("stage={stage} elapsed_ms={elapsed_ms}")
     } else {
-        format!("stage={stage} {detail}")
+        format!("stage={stage} elapsed_ms={elapsed_ms} {detail}")
     };
     write_solve_progress(progress, Some(job), &message)
+}
+
+fn write_timed_solve_progress<W: IoWrite>(
+    progress: &mut W,
+    job: Option<&JobManifestEntry>,
+    job_start: &Instant,
+    message: &str,
+) -> Result<(), String> {
+    write_solve_progress(
+        progress,
+        job,
+        &format!("{message} elapsed_ms={}", job_start.elapsed().as_millis()),
+    )
 }
 
 fn write_solve_progress<W: IoWrite>(
@@ -1601,10 +1632,11 @@ mod tests {
             .map(|value| format!("pot:{:016x}", value.to_bits()))
             .join(",");
         let raise_size = format!("prev:{:016x}", 3.0_f64.to_bits());
+        let donk_size = format!("pot:{:016x}", 0.5_f64.to_bits());
 
         assert!(payload.contains(&format!("tree_flop_oop_bet={bet_sizes}")));
         assert!(payload.contains(&format!("tree_turn_ip_raise={raise_size}")));
-        assert!(payload.contains(&format!("tree_river_donk={bet_sizes}")));
+        assert!(payload.contains(&format!("tree_river_donk={donk_size}")));
     }
 
     #[test]
@@ -1684,20 +1716,12 @@ mod tests {
                 tree.turn_donk_sizes.as_ref().unwrap(),
                 tree.river_donk_sizes.as_ref().unwrap(),
             ] {
+                assert_eq!(options.donk.len(), 1, "{preset} should have one donk size");
                 assert_eq!(
-                    options.donk.len(),
-                    3,
-                    "{preset} should have three donk bet sizes"
+                    options.donk,
+                    vec![PotRelative(0.5)],
+                    "{preset} should use 50% donk bets"
                 );
-                for (actual, expected) in options.donk.iter().zip([0.3, 0.8, 1.5]) {
-                    let PotRelative(actual) = actual else {
-                        panic!("{preset} contains a non-pot-relative donk bet size");
-                    };
-                    assert!(
-                        (actual - expected).abs() < 1e-9,
-                        "{preset} expected donk {expected}, got {actual}"
-                    );
-                }
             }
         }
     }
@@ -1843,13 +1867,17 @@ mod tests {
         run_cli_with_writer(opts, &mut output).unwrap();
 
         let output = String::from_utf8(output).unwrap();
-        assert!(output.contains("stage=parse_ranges"));
-        assert!(output.contains("stage=build_tree preset=standard_dev"));
-        assert!(output.contains("stage=memory_estimate"));
-        assert!(output.contains("stage=allocate_memory compression=false"));
+        assert!(output.contains("elapsed_ms="));
+        assert!(output.contains("stage=parse_ranges elapsed_ms="));
+        assert!(output.contains("stage=build_tree elapsed_ms="));
+        assert!(output.contains("preset=standard_dev"));
+        assert!(output.contains("stage=memory_estimate elapsed_ms="));
+        assert!(output.contains("stage=allocate_memory elapsed_ms="));
+        assert!(output.contains("compression=false"));
         assert!(output.contains("stage=initial_exploitability value="));
         assert!(output.contains("iteration=1/1 stage=start"));
-        assert!(output.contains("stage=save output="));
+        assert!(output.contains("stage=save elapsed_ms="));
+        assert!(output.contains("output="));
     }
 
     #[test]
