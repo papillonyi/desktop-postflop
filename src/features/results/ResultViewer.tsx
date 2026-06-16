@@ -1259,6 +1259,9 @@ export function ResultViewer() {
   const isSolverFinished = useAppSelector(
     (state) => state.app.isSolverFinished
   );
+  const isTrainingResult = useAppSelector(
+    (state) => state.app.isTrainingResult
+  );
   const [loaded, setLoaded] = useState<LoadedResults | null>(null);
   const [displayMode, setDisplayMode] = useState<DisplayMode>("basics");
   const [displayOptions, setDisplayOptions] =
@@ -1375,6 +1378,7 @@ export function ResultViewer() {
         dealRequest={dealRequest}
         onDealHandled={() => setDealRequest(null)}
         onUpdate={onNavigatorUpdate}
+        showPotWithoutBets={isTrainingResult}
       />
       <ResultMiddle
         autoPlayerBasics={autoPlayerBasics}

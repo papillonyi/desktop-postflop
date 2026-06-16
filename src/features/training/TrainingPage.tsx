@@ -1,9 +1,17 @@
 import {
   ArrowPathIcon,
+  ChartBarIcon,
   PlayIcon,
   ForwardIcon,
 } from "@heroicons/react/24/solid";
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
+import { useAppDispatch } from "../../app/hooks";
+import {
+  setSolverFinished,
+  setTrainingResult,
+} from "../../app/slices/appSlice";
+import { setConfig } from "../../app/slices/configSlice";
 import * as invokes from "../../invokes";
 import type {
   TrainingLibrarySummary,
@@ -167,6 +175,8 @@ function ActionReview({ review }: { review: DecisionReview | null }) {
 }
 
 export function TrainingPage() {
+  const dispatch = useAppDispatch();
+  const navigate = useNavigate();
   const navigatorRef = useRef<ResultNavigatorHandle | null>(null);
   const automationInFlightRef = useRef(false);
   const actionInFlightRef = useRef(false);
@@ -211,6 +221,18 @@ export function TrainingPage() {
     }
   };
 
+  const applyResultsState = (nextSession: TrainingSession) => {
+    dispatch(
+      setConfig({
+        board: nextSession.board,
+        effectiveStack: nextSession.effectiveStack,
+        startingPot: nextSession.startingPot,
+      })
+    );
+    dispatch(setSolverFinished(true));
+    dispatch(setTrainingResult(true));
+  };
+
   const startSession = async () => {
     setStartingSession(true);
     try {
@@ -220,6 +242,7 @@ export function TrainingPage() {
         potTypes: enabledPotTypes,
       });
       await invokes.gameApplyHistory([]);
+      applyResultsState(nextSession);
       const nextCards = await invokes.gamePrivateCards();
       setSession(nextSession);
       setCards(nextCards);
@@ -232,6 +255,17 @@ export function TrainingPage() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setStartingSession(false);
+    }
+  };
+
+  const viewResults = async () => {
+    if (!session) return;
+    try {
+      await invokes.gameApplyHistory([]);
+      applyResultsState(session);
+      navigate("/results");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -401,6 +435,16 @@ export function TrainingPage() {
             <PlayIcon className="h-5 w-5" />
             New Hand
           </button>
+          {session && (
+            <button
+              className="button-base button-gray flex items-center gap-2"
+              onClick={viewResults}
+              type="button"
+            >
+              <ChartBarIcon className="h-5 w-5" />
+              View Results
+            </button>
+          )}
         </div>
         {summary && (
           <div className="mt-3 flex flex-wrap gap-4 text-sm text-gray-600">
@@ -432,6 +476,7 @@ export function TrainingPage() {
                 onDealHandled={() => undefined}
                 onUpdate={setNavigatorUpdate}
                 ref={navigatorRef}
+                showPotWithoutBets
                 showRates={false}
               />
               <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_18rem] gap-4 p-4">

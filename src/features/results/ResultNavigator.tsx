@@ -52,6 +52,7 @@ export type ResultNavigatorProps = {
   onActionClick?: (spot: SpotPlayer, actionIndex: number) => boolean | void;
   onDealHandled: () => void;
   onUpdate: (result: ResultNavigationUpdate) => void;
+  showPotWithoutBets?: boolean;
   showRates?: boolean;
 };
 
@@ -108,6 +109,7 @@ export const ResultNavigator = forwardRef<
     onActionClick,
     onDealHandled,
     onUpdate,
+    showPotWithoutBets = false,
     showRates = true,
   },
   ref
@@ -187,7 +189,9 @@ export const ResultNavigator = forwardRef<
         selectedIndex: -1,
         prevPlayer: prevSpot.player,
         equityOop,
-        pot: config.startingPot + betSum,
+        pot: showPotWithoutBets
+          ? config.startingPot
+          : config.startingPot + betSum,
       },
     ]);
   };
@@ -195,6 +199,12 @@ export const ResultNavigator = forwardRef<
   const spliceSpotsPlayer = (spotIndex: number, actions: string[]) => {
     const prevSpot = spotsRef.current[spotIndex - 1];
     const player = prevSpot.player === "oop" ? "ip" : "oop";
+    const totalBetAmount = totalBetAmountRef.current;
+    const pot = showPotWithoutBets
+      ? config.startingPot
+      : config.startingPot + totalBetAmount[0] + totalBetAmount[1];
+    const stack =
+      config.effectiveStack - Math.max(totalBetAmount[0], totalBetAmount[1]);
     let numBetActions = actions.length;
     if (actions[0]?.split(":")[1] === "0") numBetActions -= 1;
     if (actions[1]?.split(":")[1] === "0") numBetActions -= 1;
@@ -206,6 +216,8 @@ export const ResultNavigator = forwardRef<
         index: spotIndex,
         player,
         selectedIndex: -1,
+        pot,
+        stack,
         actions: actions.map((action, i) => {
           const [name, amount] = action.split(":");
           return {
@@ -270,7 +282,9 @@ export const ResultNavigator = forwardRef<
           isSelected: false,
           isDead: !(possibleCards & (1n << BigInt(i))),
         })),
-        pot: config.startingPot + 2 * totalBetAmountAppendedRef.current[0],
+        pot: showPotWithoutBets
+          ? config.startingPot
+          : config.startingPot + 2 * totalBetAmountAppendedRef.current[0],
         stack: config.effectiveStack - totalBetAmountAppendedRef.current[0],
       },
       {
@@ -278,6 +292,10 @@ export const ResultNavigator = forwardRef<
         index: spotIndex + 1,
         player: "oop",
         selectedIndex: -1,
+        pot: showPotWithoutBets
+          ? config.startingPot
+          : config.startingPot + 2 * totalBetAmountAppendedRef.current[0],
+        stack: config.effectiveStack - totalBetAmountAppendedRef.current[0],
         actions: nextActions.map((action, i) => {
           const [name, amount] = action.split(":");
           return {
@@ -615,15 +633,22 @@ export const ResultNavigator = forwardRef<
     return [cardText(spot.selectedIndex)];
   };
 
+  const SpotStats = ({ pot, stack }: { pot: number; stack?: number }) => (
+    <div className="border-t border-gray-200 px-1.5 py-1 text-xs font-semibold leading-tight text-gray-500">
+      <div>Pot {pot}</div>
+      {stack !== undefined && <div>Stack {stack}</div>}
+    </div>
+  );
+
   return (
     <div
-      className="snug flex h-[10.5rem] gap-1 overflow-x-auto whitespace-nowrap p-1"
+      className="snug flex h-[11.5rem] shrink-0 gap-1 overflow-x-auto whitespace-nowrap p-1"
       ref={navRef}
     >
       {spots.map((spot) => (
         <div
           className={[
-            "group flex h-full min-w-[5.25rem] flex-col justify-start rounded-lg border-[3px] px-1 py-0.5 shadow-md transition",
+            "group flex h-full min-w-[6.5rem] flex-col justify-start rounded-lg border-[3px] bg-white shadow-md transition",
             spot.type === "chance"
               ? "hover:border-red-600"
               : "hover:border-blue-600",
@@ -639,7 +664,7 @@ export const ResultNavigator = forwardRef<
               <div className="px-1.5 pb-0.5 pt-1 font-semibold opacity-70 group-hover:opacity-100">
                 {spot.player.toUpperCase()}
               </div>
-              <div className="flex flex-grow flex-col items-center justify-evenly px-3 font-semibold">
+              <div className="flex min-h-0 flex-grow flex-col items-center justify-evenly px-3 font-semibold">
                 {spotCards(spot).map((card) => (
                   <span className={card.colorClass} key={card.rank + card.suit}>
                     {card.rank}
@@ -678,6 +703,10 @@ export const ResultNavigator = forwardRef<
                     </div>
                   )}
               </div>
+              <SpotStats
+                pot={spot.pot ?? config.startingPot}
+                stack={spot.stack}
+              />
             </>
           )}
 
@@ -691,7 +720,7 @@ export const ResultNavigator = forwardRef<
               >
                 {spot.player.toUpperCase()}
               </div>
-              <div className="flex-grow overflow-y-auto">
+              <div className="min-h-0 flex-grow overflow-y-auto px-1">
                 {spot.actions.map((action) => (
                   <button
                     className={[
@@ -731,6 +760,10 @@ export const ResultNavigator = forwardRef<
                   </button>
                 ))}
               </div>
+              <SpotStats
+                pot={spot.pot ?? config.startingPot}
+                stack={spot.stack}
+              />
             </>
           )}
 
@@ -744,14 +777,14 @@ export const ResultNavigator = forwardRef<
               >
                 END
               </div>
-              <div className="flex flex-grow flex-col items-center justify-evenly font-semibold">
+              <div className="flex min-h-0 flex-grow flex-col items-center justify-evenly font-semibold">
                 {(spot.equityOop === 0 || spot.equityOop === 1) && (
                   <div className="px-3">
                     {["IP", "OOP"][spot.equityOop]} Wins
                   </div>
                 )}
-                <div className="px-3">Pot {spot.pot}</div>
               </div>
+              <SpotStats pot={spot.pot} />
             </>
           )}
         </div>
