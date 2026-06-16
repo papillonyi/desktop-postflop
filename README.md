@@ -88,19 +88,19 @@ Tree sizes are profile data, not Rust presets. `treeConfig.flop/turn/river` defi
 Generated solver files are not committed. Write precomputed training libraries outside this repo, for example:
 
 ```sh
-pixi run training-precompute --config training-profiles/smoke.json --out ../training-games-dev --overwrite
+pixi run training-precompute-release --config training-profiles/smoke.json --out ../training-games-dev --overwrite
 ```
 
 Use `training-profiles/dev-light.json` for real 6-max BTN-vs-BB range jobs with a lightweight inline tree config. It has one flop and the same 100bb/200bb stack variants as the formal profiles; add `--limit 1` when you only want one quick end-to-end job:
 
 ```sh
-pixi run training-precompute --config training-profiles/dev-light.json --out ../training-games-dev --overwrite --limit 1
+pixi run training-precompute-release --config training-profiles/dev-light.json --out ../training-games-dev --overwrite --limit 1
 ```
 
 For a quick profile/path validation without generating `.bin` files:
 
 ```sh
-pixi run training-precompute --config training-profiles/6max-heads-up.json --out /tmp/desktop-postflop-6max-dry-run --dry-run --limit 3 --overwrite
+pixi run training-precompute-release --config training-profiles/6max-heads-up.json --out /tmp/desktop-postflop-6max-dry-run --dry-run --limit 3 --overwrite
 ```
 
 The precompute command prints per-job progress plus intra-job stages such as `build_tree`, `memory_estimate`, `allocate_memory`, `initial_exploitability`, and iteration starts/checkpoints. Intra-job stage lines include `elapsed_ms` from the start of that job. The training library manifest is written to `<out>/manifest.json`, and solved jobs are stored as `<out>/<potType>/<profileId>/*.bin`. The Training page defaults to `../training-games-dev`; pass a different root in the page input if you generated data elsewhere.
