@@ -81,16 +81,20 @@ The current server serves `dist/` from this checkout and binds to `127.0.0.1:300
 
 Training profiles live in `training-profiles/`. Profiles reference range files by `oopRangePath` and `ipRangePath`; the checked-in source ranges live under `training-ranges/`. The 6-max profile set uses `training-ranges/6max`, copied from `~/workspace/gto/ranges/6max_range`, and `training-profiles/smoke.json` uses tiny `AA` vs `KK` ranges for fast development checks.
 
+Profile amounts use `1 = 1bb`. Because the solver stores pot and stack as integers, half-bb preflop pots are rounded to the nearest bb in the checked-in profiles. Stack depth variants are listed under `stackVariants`, for example `100bb weight 50` and `200bb weight 50`; the training session picker first samples the profile by `weight`, then samples the stack variant by `stackWeight`, then samples a solved flop for that stack.
+
+Tree sizes are profile data, not Rust presets. `treeConfig.flop/turn/river` define OOP/IP bet sizes, raise size, and donk size. The formal 6-max profiles use `30%,80%,150%` bets, `3x` raises, and `50%` donks. The solver has no separate flop-donk field, so when a profile includes `treeConfig.flop.donk`, it is represented as the OOP flop bet size for that spot.
+
 Generated solver files are not committed. Write precomputed training libraries outside this repo, for example:
 
 ```sh
 pixi run training-precompute --config training-profiles/smoke.json --out ../training-games-dev --overwrite
 ```
 
-Use `training-profiles/dev-light.json` for a single real 6-max BTN-vs-BB range job with the lightweight `standard_dev` tree preset. This is intended for checking real range loading, memory estimates, save/load, and progress output before attempting the full 6-max set:
+Use `training-profiles/dev-light.json` for real 6-max BTN-vs-BB range jobs with a lightweight inline tree config. It has one flop and the same 100bb/200bb stack variants as the formal profiles; add `--limit 1` when you only want one quick end-to-end job:
 
 ```sh
-pixi run training-precompute --config training-profiles/dev-light.json --out ../training-games-dev --overwrite
+pixi run training-precompute --config training-profiles/dev-light.json --out ../training-games-dev --overwrite --limit 1
 ```
 
 For a quick profile/path validation without generating `.bin` files:

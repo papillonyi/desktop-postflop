@@ -75,6 +75,7 @@ pub struct SessionStartResponse {
     pub root: String,
     pub profile_id: String,
     pub profile_weight: u32,
+    pub stack_weight: u32,
     pub spot: String,
     pub pot_type: String,
     pub oop_position: String,
@@ -276,6 +277,7 @@ fn build_session_from_job(
         root: display_path(root),
         profile_id: selected.job.profile_id.clone(),
         profile_weight: selected.job.profile_weight,
+        stack_weight: selected.job.stack_weight,
         spot: selected.job.spot.clone(),
         pot_type: selected.job.pot_type.clone(),
         oop_position: selected.job.oop_position.clone(),
@@ -570,26 +572,47 @@ fn choose_session_job_index(jobs: &[ResolvedJob<'_>], rng: &mut Lcg) -> usize {
     }
 
     let groups = profile_groups.into_values().collect::<Vec<_>>();
-    let total_weight = groups
+    let profile_weights = groups.iter().map(|(weight, _)| *weight).collect::<Vec<_>>();
+    let group_index = choose_weighted_index(&profile_weights, rng);
+
+    let mut stack_groups: BTreeMap<i32, (u32, Vec<usize>)> = BTreeMap::new();
+    for job_index in &groups[group_index].1 {
+        let job = jobs[*job_index].job;
+        let entry = stack_groups
+            .entry(job.effective_stack)
+            .or_insert((job.stack_weight, Vec::new()));
+        entry.0 = entry.0.max(job.stack_weight);
+        entry.1.push(*job_index);
+    }
+
+    let stack_groups = stack_groups.into_values().collect::<Vec<_>>();
+    let stack_weights = stack_groups
         .iter()
-        .fold(0u64, |sum, (weight, _)| sum + u64::from(*weight));
-    let group_index = if total_weight == 0 {
-        rng.next_usize(groups.len())
-    } else {
-        let mut ticket = rng.next_u64() % total_weight;
-        let mut selected = 0;
-        for (index, (weight, _)) in groups.iter().enumerate() {
-            let weight = u64::from(*weight);
-            if ticket < weight {
-                selected = index;
-                break;
-            }
-            ticket -= weight;
-        }
-        selected
-    };
-    let job_indices = &groups[group_index].1;
+        .map(|(weight, _)| *weight)
+        .collect::<Vec<_>>();
+    let stack_group_index = choose_weighted_index(&stack_weights, rng);
+    let job_indices = &stack_groups[stack_group_index].1;
     job_indices[rng.next_usize(job_indices.len())]
+}
+
+fn choose_weighted_index(weights: &[u32], rng: &mut Lcg) -> usize {
+    let total_weight = weights
+        .iter()
+        .fold(0u64, |sum, weight| sum + u64::from(*weight));
+    if total_weight == 0 {
+        return rng.next_usize(weights.len());
+    }
+
+    let mut ticket = rng.next_u64() % total_weight;
+    for (index, weight) in weights.iter().enumerate() {
+        let weight = u64::from(*weight);
+        if ticket < weight {
+            return index;
+        }
+        ticket -= weight;
+    }
+
+    weights.len().saturating_sub(1)
 }
 
 fn sample_hand_pair(
@@ -758,8 +781,34 @@ impl Lcg {
 mod tests {
     use super::*;
     use crate::training_precompute::{
-        execute_job, range_fingerprint, JobManifestEntry, LoadedProfileRanges, TrainingProfile,
+        execute_job, range_fingerprint, JobManifestEntry, LoadedProfileRanges,
+        ProfileStreetTreeConfig, ProfileTreeConfig, StackVariant, TrainingProfile,
     };
+
+    fn street_tree(
+        oop_bet: &str,
+        ip_bet: &str,
+        raise: &str,
+        donk: Option<&str>,
+    ) -> ProfileStreetTreeConfig {
+        ProfileStreetTreeConfig {
+            oop_bet: oop_bet.to_string(),
+            ip_bet: ip_bet.to_string(),
+            raise: raise.to_string(),
+            donk: donk.map(str::to_string),
+        }
+    }
+
+    fn standard_tree_config() -> ProfileTreeConfig {
+        ProfileTreeConfig {
+            flop: street_tree("50%", "30%,80%,150%", "3x", Some("50%")),
+            turn: street_tree("30%,80%,150%", "30%,80%,150%", "3x", Some("50%")),
+            river: street_tree("30%,80%,150%", "30%,80%,150%", "3x", Some("50%")),
+            add_allin_threshold: 1.5,
+            force_allin_threshold: 0.15,
+            merging_threshold: 0.1,
+        }
+    }
 
     fn profile(id: &str) -> TrainingProfile {
         TrainingProfile {
@@ -770,19 +819,28 @@ mod tests {
             pot_type: "2bp".to_string(),
             oop_position: "BB".to_string(),
             ip_position: "BTN".to_string(),
-            starting_pot: 550,
-            effective_stack: 10000,
+            starting_pot: 6,
+            effective_stack: None,
+            stack_variants: vec![StackVariant {
+                effective_stack: 100,
+                weight: 1,
+            }],
             rake_rate: 0.0,
             rake_cap: 0.0,
             oop_range_path: "oop.txt".into(),
             ip_range_path: "ip.txt".into(),
-            tree_preset: "standard_srp".to_string(),
+            tree_preset: None,
+            tree_config: Some(standard_tree_config()),
             flop_count: 1,
             seed: 1,
             target_exploitability: 10_000.0,
             max_iterations: 1,
             enable_compression: false,
         }
+    }
+
+    fn first_stack(profile: &TrainingProfile) -> StackVariant {
+        profile.stack_variants_for_plan()[0].clone()
     }
 
     fn ranges() -> LoadedProfileRanges {
@@ -821,13 +879,17 @@ mod tests {
         std::fs::write(&existing_path, b"not loaded by summary").unwrap();
 
         let ranges = ranges();
-        let mut solved = JobManifestEntry::planned(&profile, Some(&ranges), [0, 4, 8], root);
+        let stack = first_stack(&profile);
+        let mut solved =
+            JobManifestEntry::planned(&profile, &stack, Some(&ranges), [0, 4, 8], root);
         solved.output_relative_path = Some("p1.bin".into());
         solved.path = Some(existing_path.clone());
         solved.status = JobStatus::Solved;
-        let mut planned = JobManifestEntry::planned(&profile, Some(&ranges), [1, 5, 9], root);
+        let mut planned =
+            JobManifestEntry::planned(&profile, &stack, Some(&ranges), [1, 5, 9], root);
         planned.status = JobStatus::Planned;
-        let mut missing = JobManifestEntry::planned(&profile, Some(&ranges), [2, 6, 10], root);
+        let mut missing =
+            JobManifestEntry::planned(&profile, &stack, Some(&ranges), [2, 6, 10], root);
         missing.output_relative_path = Some("missing.bin".into());
         missing.path = Some(root.join("missing.bin"));
         missing.status = JobStatus::Solved;
@@ -854,7 +916,13 @@ mod tests {
         std::fs::write(&path, b"exists").unwrap();
         let profile = profile("p1");
         let ranges = ranges();
-        let mut job = JobManifestEntry::planned(&profile, Some(&ranges), [0, 4, 8], root);
+        let mut job = JobManifestEntry::planned(
+            &profile,
+            &first_stack(&profile),
+            Some(&ranges),
+            [0, 4, 8],
+            root,
+        );
         job.output_relative_path = Some("job.bin".into());
         job.path = Some(path);
         job.status = JobStatus::Solved;
@@ -883,6 +951,41 @@ mod tests {
     }
 
     #[test]
+    fn session_selection_respects_stack_weight_within_profile() {
+        let root = Path::new("training-games");
+        let profile = profile("p1");
+        let ranges = ranges();
+        let stack_100 = StackVariant {
+            effective_stack: 100,
+            weight: 0,
+        };
+        let stack_200 = StackVariant {
+            effective_stack: 200,
+            weight: 10,
+        };
+        let mut job_100 =
+            JobManifestEntry::planned(&profile, &stack_100, Some(&ranges), [0, 4, 8], root);
+        let mut job_200 =
+            JobManifestEntry::planned(&profile, &stack_200, Some(&ranges), [1, 5, 9], root);
+        job_100.status = JobStatus::Solved;
+        job_200.status = JobStatus::Solved;
+        let jobs = vec![job_100, job_200];
+        let resolved = jobs
+            .iter()
+            .map(|job| ResolvedJob {
+                job,
+                path: PathBuf::from("job.bin"),
+            })
+            .collect::<Vec<_>>();
+
+        for seed in 1..20 {
+            let mut rng = Lcg::new(seed);
+            let selected = choose_session_job_index(&resolved, &mut rng);
+            assert_eq!(resolved[selected].job.effective_stack, 200);
+        }
+    }
+
+    #[test]
     fn resolve_root_expands_home() {
         let Some(home) = std::env::var_os("HOME") else {
             return;
@@ -903,7 +1006,13 @@ mod tests {
 
         let profile = profile("p1");
         let ranges = ranges();
-        let mut job = JobManifestEntry::planned(&profile, Some(&ranges), [0, 4, 8], root);
+        let mut job = JobManifestEntry::planned(
+            &profile,
+            &first_stack(&profile),
+            Some(&ranges),
+            [0, 4, 8],
+            root,
+        );
         job.status = JobStatus::Solved;
         job.output_relative_path = Some(relative_path);
         job.path = Some(PathBuf::from("wrong/job.bin"));
@@ -929,14 +1038,24 @@ mod tests {
 
         let profile = profile("p1");
         let ranges = ranges();
-        let mut relative_escape =
-            JobManifestEntry::planned(&profile, Some(&ranges), [0, 4, 8], root);
+        let mut relative_escape = JobManifestEntry::planned(
+            &profile,
+            &first_stack(&profile),
+            Some(&ranges),
+            [0, 4, 8],
+            root,
+        );
         relative_escape.status = JobStatus::Solved;
         relative_escape.output_relative_path = Some("../job.bin".into());
         relative_escape.path = None;
 
-        let mut absolute_escape =
-            JobManifestEntry::planned(&profile, Some(&ranges), [1, 5, 9], root);
+        let mut absolute_escape = JobManifestEntry::planned(
+            &profile,
+            &first_stack(&profile),
+            Some(&ranges),
+            [1, 5, 9],
+            root,
+        );
         absolute_escape.status = JobStatus::Solved;
         absolute_escape.output_relative_path = None;
         absolute_escape.path = Some(outside_path);
@@ -958,7 +1077,8 @@ mod tests {
         let profile = profile("smoke_2bp_btn_vs_bb_100bb");
         let ranges = ranges();
         let flop = [0, 4, 8];
-        let mut job = JobManifestEntry::planned(&profile, Some(&ranges), flop, root);
+        let mut job =
+            JobManifestEntry::planned(&profile, &first_stack(&profile), Some(&ranges), flop, root);
         execute_job(&profile, &ranges, flop, &mut job, true).unwrap();
         let (game, memo): (PostFlopGame, String) =
             load_data_from_file(job.path.as_ref().unwrap(), None).unwrap();
@@ -977,7 +1097,8 @@ mod tests {
         let profile = profile("smoke_2bp_btn_vs_bb_100bb");
         let ranges = ranges();
         let flop = [0, 4, 8];
-        let mut job = JobManifestEntry::planned(&profile, Some(&ranges), flop, root);
+        let mut job =
+            JobManifestEntry::planned(&profile, &first_stack(&profile), Some(&ranges), flop, root);
         execute_job(&profile, &ranges, flop, &mut job, true).unwrap();
         let manifest = manifest_with_jobs(root, vec![job]);
         write_manifest(root, &manifest);

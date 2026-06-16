@@ -2,235 +2,572 @@
   "version": 1,
   "profiles": [
     {
-      "id": "2bp_btn_vs_bb_100bb",
+      "id": "2bp_btn_vs_bb",
       "enabled": true,
       "weight": 70,
       "spot": "BTN open vs BB call",
       "potType": "2bp",
       "oopPosition": "BB",
       "ipPosition": "BTN",
-      "startingPot": 550,
-      "effectiveStack": 10000,
+      "startingPot": 6,
       "rakeRate": 0,
       "rakeCap": 0,
-      "treePreset": "standard_srp",
       "flopCount": 10,
       "seed": 1,
       "targetExploitability": 0.3,
       "maxIterations": 1000,
       "enableCompression": true,
       "oopRangePath": "../training-ranges/6max/BTN/2.5bb/BB/Call/BB_range.txt",
-      "ipRangePath": "../training-ranges/6max/BTN/2.5bb/BB/Call/BTN_range.txt"
+      "ipRangePath": "../training-ranges/6max/BTN/2.5bb/BB/Call/BTN_range.txt",
+      "stackVariants": [
+        {
+          "effectiveStack": 100,
+          "weight": 50
+        },
+        {
+          "effectiveStack": 200,
+          "weight": 50
+        }
+      ],
+      "treeConfig": {
+        "flop": {
+          "oopBet": "50%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "turn": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "river": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "addAllinThreshold": 1.5,
+        "forceAllinThreshold": 0.15,
+        "mergingThreshold": 0.1
+      }
     },
     {
-      "id": "2bp_co_vs_bb_100bb",
+      "id": "2bp_co_vs_bb",
       "enabled": true,
       "weight": 55,
       "spot": "CO open vs BB call",
       "potType": "2bp",
       "oopPosition": "BB",
       "ipPosition": "CO",
-      "startingPot": 550,
-      "effectiveStack": 10000,
+      "startingPot": 6,
       "rakeRate": 0,
       "rakeCap": 0,
-      "treePreset": "standard_srp",
       "flopCount": 10,
       "seed": 2,
       "targetExploitability": 0.3,
       "maxIterations": 1000,
       "enableCompression": true,
       "oopRangePath": "../training-ranges/6max/CO/2.5bb/BB/Call/BB_range.txt",
-      "ipRangePath": "../training-ranges/6max/CO/2.5bb/BB/Call/CO_range.txt"
+      "ipRangePath": "../training-ranges/6max/CO/2.5bb/BB/Call/CO_range.txt",
+      "stackVariants": [
+        {
+          "effectiveStack": 100,
+          "weight": 50
+        },
+        {
+          "effectiveStack": 200,
+          "weight": 50
+        }
+      ],
+      "treeConfig": {
+        "flop": {
+          "oopBet": "50%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "turn": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "river": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "addAllinThreshold": 1.5,
+        "forceAllinThreshold": 0.15,
+        "mergingThreshold": 0.1
+      }
     },
     {
-      "id": "2bp_mp_vs_bb_100bb",
+      "id": "2bp_mp_vs_bb",
       "enabled": true,
       "weight": 45,
       "spot": "MP open vs BB call",
       "potType": "2bp",
       "oopPosition": "BB",
       "ipPosition": "MP",
-      "startingPot": 550,
-      "effectiveStack": 10000,
+      "startingPot": 6,
       "rakeRate": 0,
       "rakeCap": 0,
-      "treePreset": "standard_srp",
       "flopCount": 10,
       "seed": 3,
       "targetExploitability": 0.3,
       "maxIterations": 1000,
       "enableCompression": true,
       "oopRangePath": "../training-ranges/6max/MP/2.5bb/BB/Call/BB_range.txt",
-      "ipRangePath": "../training-ranges/6max/MP/2.5bb/BB/Call/MP_range.txt"
+      "ipRangePath": "../training-ranges/6max/MP/2.5bb/BB/Call/MP_range.txt",
+      "stackVariants": [
+        {
+          "effectiveStack": 100,
+          "weight": 50
+        },
+        {
+          "effectiveStack": 200,
+          "weight": 50
+        }
+      ],
+      "treeConfig": {
+        "flop": {
+          "oopBet": "50%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "turn": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "river": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "addAllinThreshold": 1.5,
+        "forceAllinThreshold": 0.15,
+        "mergingThreshold": 0.1
+      }
     },
     {
-      "id": "2bp_sb_vs_bb_100bb",
+      "id": "2bp_sb_vs_bb",
       "enabled": true,
       "weight": 50,
       "spot": "SB open vs BB call",
       "potType": "2bp",
       "oopPosition": "SB",
       "ipPosition": "BB",
-      "startingPot": 550,
-      "effectiveStack": 10000,
+      "startingPot": 6,
       "rakeRate": 0,
       "rakeCap": 0,
-      "treePreset": "standard_srp",
       "flopCount": 10,
       "seed": 4,
       "targetExploitability": 0.3,
       "maxIterations": 1000,
       "enableCompression": true,
       "oopRangePath": "../training-ranges/6max/SB/3.0bb/BB/Call/SB_range.txt",
-      "ipRangePath": "../training-ranges/6max/SB/3.0bb/BB/Call/BB_range.txt"
+      "ipRangePath": "../training-ranges/6max/SB/3.0bb/BB/Call/BB_range.txt",
+      "stackVariants": [
+        {
+          "effectiveStack": 100,
+          "weight": 50
+        },
+        {
+          "effectiveStack": 200,
+          "weight": 50
+        }
+      ],
+      "treeConfig": {
+        "flop": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x"
+        },
+        "turn": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "river": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "addAllinThreshold": 1.5,
+        "forceAllinThreshold": 0.15,
+        "mergingThreshold": 0.1
+      }
     },
     {
-      "id": "3bp_btn_vs_bb_100bb",
+      "id": "3bp_btn_vs_bb",
       "enabled": true,
       "weight": 25,
       "spot": "BTN open, BB 3bet, BTN call",
       "potType": "3bp",
       "oopPosition": "BB",
       "ipPosition": "BTN",
-      "startingPot": 2100,
-      "effectiveStack": 10000,
+      "startingPot": 21,
       "rakeRate": 0,
       "rakeCap": 0,
-      "treePreset": "standard_3bp",
       "flopCount": 10,
       "seed": 5,
       "targetExploitability": 0.3,
       "maxIterations": 1000,
       "enableCompression": true,
       "oopRangePath": "../training-ranges/6max/BTN/2.5bb/BB/11.0bb/BTN/Call/BB_range.txt",
-      "ipRangePath": "../training-ranges/6max/BTN/2.5bb/BB/11.0bb/BTN/Call/BTN_range.txt"
+      "ipRangePath": "../training-ranges/6max/BTN/2.5bb/BB/11.0bb/BTN/Call/BTN_range.txt",
+      "stackVariants": [
+        {
+          "effectiveStack": 100,
+          "weight": 50
+        },
+        {
+          "effectiveStack": 200,
+          "weight": 50
+        }
+      ],
+      "treeConfig": {
+        "flop": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x"
+        },
+        "turn": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "river": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "addAllinThreshold": 1.5,
+        "forceAllinThreshold": 0.15,
+        "mergingThreshold": 0.1
+      }
     },
     {
-      "id": "3bp_btn_vs_sb_100bb",
+      "id": "3bp_btn_vs_sb",
       "enabled": true,
       "weight": 20,
       "spot": "BTN open, SB 3bet, BTN call",
       "potType": "3bp",
       "oopPosition": "SB",
       "ipPosition": "BTN",
-      "startingPot": 2100,
-      "effectiveStack": 10000,
+      "startingPot": 21,
       "rakeRate": 0,
       "rakeCap": 0,
-      "treePreset": "standard_3bp",
       "flopCount": 10,
       "seed": 6,
       "targetExploitability": 0.3,
       "maxIterations": 1000,
       "enableCompression": true,
       "oopRangePath": "../training-ranges/6max/BTN/2.5bb/SB/11.0bb/BTN/Call/SB_range.txt",
-      "ipRangePath": "../training-ranges/6max/BTN/2.5bb/SB/11.0bb/BTN/Call/BTN_range.txt"
+      "ipRangePath": "../training-ranges/6max/BTN/2.5bb/SB/11.0bb/BTN/Call/BTN_range.txt",
+      "stackVariants": [
+        {
+          "effectiveStack": 100,
+          "weight": 50
+        },
+        {
+          "effectiveStack": 200,
+          "weight": 50
+        }
+      ],
+      "treeConfig": {
+        "flop": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x"
+        },
+        "turn": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "river": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "addAllinThreshold": 1.5,
+        "forceAllinThreshold": 0.15,
+        "mergingThreshold": 0.1
+      }
     },
     {
-      "id": "3bp_co_vs_btn_100bb",
+      "id": "3bp_co_vs_btn",
       "enabled": true,
       "weight": 18,
       "spot": "CO open, BTN 3bet, CO call",
       "potType": "3bp",
       "oopPosition": "CO",
       "ipPosition": "BTN",
-      "startingPot": 2100,
-      "effectiveStack": 10000,
+      "startingPot": 21,
       "rakeRate": 0,
       "rakeCap": 0,
-      "treePreset": "standard_3bp",
       "flopCount": 10,
       "seed": 7,
       "targetExploitability": 0.3,
       "maxIterations": 1000,
       "enableCompression": true,
       "oopRangePath": "../training-ranges/6max/CO/2.5bb/BTN/8.5bb/CO/Call/CO_range.txt",
-      "ipRangePath": "../training-ranges/6max/CO/2.5bb/BTN/8.5bb/CO/Call/BTN_range.txt"
+      "ipRangePath": "../training-ranges/6max/CO/2.5bb/BTN/8.5bb/CO/Call/BTN_range.txt",
+      "stackVariants": [
+        {
+          "effectiveStack": 100,
+          "weight": 50
+        },
+        {
+          "effectiveStack": 200,
+          "weight": 50
+        }
+      ],
+      "treeConfig": {
+        "flop": {
+          "oopBet": "50%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "turn": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "river": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "addAllinThreshold": 1.5,
+        "forceAllinThreshold": 0.15,
+        "mergingThreshold": 0.1
+      }
     },
     {
-      "id": "3bp_sb_vs_bb_100bb",
+      "id": "3bp_sb_vs_bb",
       "enabled": true,
       "weight": 20,
       "spot": "SB open, BB 3bet, SB call",
       "potType": "3bp",
       "oopPosition": "SB",
       "ipPosition": "BB",
-      "startingPot": 2100,
-      "effectiveStack": 10000,
+      "startingPot": 21,
       "rakeRate": 0,
       "rakeCap": 0,
-      "treePreset": "standard_3bp",
       "flopCount": 10,
       "seed": 8,
       "targetExploitability": 0.3,
       "maxIterations": 1000,
       "enableCompression": true,
       "oopRangePath": "../training-ranges/6max/SB/3.0bb/BB/9.0bb/SB/Call/SB_range.txt",
-      "ipRangePath": "../training-ranges/6max/SB/3.0bb/BB/9.0bb/SB/Call/BB_range.txt"
+      "ipRangePath": "../training-ranges/6max/SB/3.0bb/BB/9.0bb/SB/Call/BB_range.txt",
+      "stackVariants": [
+        {
+          "effectiveStack": 100,
+          "weight": 50
+        },
+        {
+          "effectiveStack": 200,
+          "weight": 50
+        }
+      ],
+      "treeConfig": {
+        "flop": {
+          "oopBet": "50%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "turn": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "river": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "addAllinThreshold": 1.5,
+        "forceAllinThreshold": 0.15,
+        "mergingThreshold": 0.1
+      }
     },
     {
-      "id": "4bp_btn_vs_bb_100bb",
+      "id": "4bp_btn_vs_bb",
       "enabled": true,
       "weight": 5,
       "spot": "BTN open, BB 3bet, BTN 4bet, BB call",
       "potType": "4bp",
       "oopPosition": "BB",
       "ipPosition": "BTN",
-      "startingPot": 4500,
-      "effectiveStack": 10000,
+      "startingPot": 45,
       "rakeRate": 0,
       "rakeCap": 0,
-      "treePreset": "standard_4bp",
       "flopCount": 10,
       "seed": 9,
       "targetExploitability": 0.3,
       "maxIterations": 1000,
       "enableCompression": true,
       "oopRangePath": "../training-ranges/6max/BTN/2.5bb/BB/11.0bb/BTN/24.0bb/BB/Call/BB_range.txt",
-      "ipRangePath": "../training-ranges/6max/BTN/2.5bb/BB/11.0bb/BTN/24.0bb/BB/Call/BTN_range.txt"
+      "ipRangePath": "../training-ranges/6max/BTN/2.5bb/BB/11.0bb/BTN/24.0bb/BB/Call/BTN_range.txt",
+      "stackVariants": [
+        {
+          "effectiveStack": 100,
+          "weight": 50
+        },
+        {
+          "effectiveStack": 200,
+          "weight": 50
+        }
+      ],
+      "treeConfig": {
+        "flop": {
+          "oopBet": "50%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "turn": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "river": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "addAllinThreshold": 1.5,
+        "forceAllinThreshold": 0.15,
+        "mergingThreshold": 0.1
+      }
     },
     {
-      "id": "4bp_btn_vs_sb_100bb",
+      "id": "4bp_btn_vs_sb",
       "enabled": true,
       "weight": 5,
       "spot": "BTN open, SB 3bet, BTN 4bet, SB call",
       "potType": "4bp",
       "oopPosition": "SB",
       "ipPosition": "BTN",
-      "startingPot": 4500,
-      "effectiveStack": 10000,
+      "startingPot": 45,
       "rakeRate": 0,
       "rakeCap": 0,
-      "treePreset": "standard_4bp",
       "flopCount": 10,
       "seed": 10,
       "targetExploitability": 0.3,
       "maxIterations": 1000,
       "enableCompression": true,
       "oopRangePath": "../training-ranges/6max/BTN/2.5bb/SB/11.0bb/BTN/24.0bb/SB/Call/SB_range.txt",
-      "ipRangePath": "../training-ranges/6max/BTN/2.5bb/SB/11.0bb/BTN/24.0bb/SB/Call/BTN_range.txt"
+      "ipRangePath": "../training-ranges/6max/BTN/2.5bb/SB/11.0bb/BTN/24.0bb/SB/Call/BTN_range.txt",
+      "stackVariants": [
+        {
+          "effectiveStack": 100,
+          "weight": 50
+        },
+        {
+          "effectiveStack": 200,
+          "weight": 50
+        }
+      ],
+      "treeConfig": {
+        "flop": {
+          "oopBet": "50%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "turn": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "river": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "addAllinThreshold": 1.5,
+        "forceAllinThreshold": 0.15,
+        "mergingThreshold": 0.1
+      }
     },
     {
-      "id": "4bp_co_vs_btn_100bb",
+      "id": "4bp_co_vs_btn",
       "enabled": true,
       "weight": 4,
       "spot": "CO open, BTN 3bet, CO 4bet, BTN call",
       "potType": "4bp",
       "oopPosition": "CO",
       "ipPosition": "BTN",
-      "startingPot": 4500,
-      "effectiveStack": 10000,
+      "startingPot": 45,
       "rakeRate": 0,
       "rakeCap": 0,
-      "treePreset": "standard_4bp",
       "flopCount": 10,
       "seed": 11,
       "targetExploitability": 0.3,
       "maxIterations": 1000,
       "enableCompression": true,
       "oopRangePath": "../training-ranges/6max/CO/2.5bb/BTN/8.5bb/CO/22.0bb/BTN/Call/CO_range.txt",
-      "ipRangePath": "../training-ranges/6max/CO/2.5bb/BTN/8.5bb/CO/22.0bb/BTN/Call/BTN_range.txt"
+      "ipRangePath": "../training-ranges/6max/CO/2.5bb/BTN/8.5bb/CO/22.0bb/BTN/Call/BTN_range.txt",
+      "stackVariants": [
+        {
+          "effectiveStack": 100,
+          "weight": 50
+        },
+        {
+          "effectiveStack": 200,
+          "weight": 50
+        }
+      ],
+      "treeConfig": {
+        "flop": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x"
+        },
+        "turn": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "river": {
+          "oopBet": "30%,80%,150%",
+          "ipBet": "30%,80%,150%",
+          "raise": "3x",
+          "donk": "50%"
+        },
+        "addAllinThreshold": 1.5,
+        "forceAllinThreshold": 0.15,
+        "mergingThreshold": 0.1
+      }
     }
   ]
 }

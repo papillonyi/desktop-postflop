@@ -460,6 +460,7 @@ export function TrainingPage() {
                       <div className="text-right text-sm text-gray-600">
                         <div>Pot {session.startingPot}</div>
                         <div>Stack {session.effectiveStack}</div>
+                        <div>Stack weight {session.stackWeight}</div>
                       </div>
                     </div>
                     <div className="mt-4 flex flex-wrap items-center gap-5">

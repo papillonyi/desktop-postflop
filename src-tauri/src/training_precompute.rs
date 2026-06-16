@@ -134,8 +134,14 @@ pub struct TrainingProfile {
     pub ip_position: String,
     #[serde(rename = "startingPot")]
     pub starting_pot: i32,
-    #[serde(rename = "effectiveStack")]
-    pub effective_stack: i32,
+    #[serde(
+        default,
+        rename = "effectiveStack",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub effective_stack: Option<i32>,
+    #[serde(default, rename = "stackVariants")]
+    pub stack_variants: Vec<StackVariant>,
     #[serde(rename = "rakeRate")]
     pub rake_rate: f64,
     #[serde(rename = "rakeCap")]
@@ -144,8 +150,18 @@ pub struct TrainingProfile {
     pub oop_range_path: PathBuf,
     #[serde(default, rename = "ipRangePath")]
     pub ip_range_path: PathBuf,
-    #[serde(rename = "treePreset")]
-    pub tree_preset: String,
+    #[serde(
+        default,
+        rename = "treePreset",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub tree_preset: Option<String>,
+    #[serde(
+        default,
+        rename = "treeConfig",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub tree_config: Option<ProfileTreeConfig>,
     #[serde(rename = "flopCount")]
     pub flop_count: usize,
     pub seed: u64,
@@ -165,6 +181,57 @@ impl TrainingProfile {
             None
         }
     }
+
+    pub fn stack_variants_for_plan(&self) -> Vec<StackVariant> {
+        if !self.stack_variants.is_empty() {
+            self.stack_variants.clone()
+        } else if let Some(effective_stack) = self.effective_stack {
+            vec![StackVariant {
+                effective_stack,
+                weight: default_stack_weight(),
+            }]
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn tree_config_label(&self) -> String {
+        self.tree_preset
+            .clone()
+            .unwrap_or_else(|| "profile".to_string())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct StackVariant {
+    #[serde(rename = "effectiveStack")]
+    pub effective_stack: i32,
+    #[serde(default = "default_stack_weight")]
+    pub weight: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileTreeConfig {
+    pub flop: ProfileStreetTreeConfig,
+    pub turn: ProfileStreetTreeConfig,
+    pub river: ProfileStreetTreeConfig,
+    #[serde(default = "default_add_allin_threshold")]
+    pub add_allin_threshold: f64,
+    #[serde(default = "default_force_allin_threshold")]
+    pub force_allin_threshold: f64,
+    #[serde(default = "default_merging_threshold")]
+    pub merging_threshold: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileStreetTreeConfig {
+    pub oop_bet: String,
+    pub ip_bet: String,
+    pub raise: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub donk: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -209,6 +276,8 @@ pub struct JobManifestEntry {
     pub profile_id: String,
     #[serde(default = "default_profile_weight")]
     pub profile_weight: u32,
+    #[serde(default = "default_stack_weight")]
+    pub stack_weight: u32,
     pub spot: String,
     pub pot_type: String,
     pub oop_position: String,
@@ -239,6 +308,7 @@ pub struct JobManifestEntry {
 impl JobManifestEntry {
     pub fn planned(
         profile: &TrainingProfile,
+        stack: &StackVariant,
         ranges: Option<&LoadedProfileRanges>,
         flop: [u8; 3],
         output_dir: &Path,
@@ -246,20 +316,23 @@ impl JobManifestEntry {
         let range_fingerprint = ranges
             .map(|ranges| ranges.range_fingerprint.clone())
             .unwrap_or_default();
-        let profile_fingerprint = profile_fingerprint(profile, &range_fingerprint);
-        let output_relative_path = output_relative_path(profile, &profile_fingerprint, flop);
+        let profile_fingerprint =
+            profile_fingerprint(profile, stack.effective_stack, &range_fingerprint);
+        let output_relative_path =
+            output_relative_path(profile, stack.effective_stack, &profile_fingerprint, flop);
         let path = output_dir.join(&output_relative_path);
         Self {
             profile_id: profile.id.clone(),
             profile_weight: profile.weight,
+            stack_weight: stack.weight,
             spot: profile.spot.clone(),
             pot_type: profile.pot_type.clone(),
             oop_position: profile.oop_position.clone(),
             ip_position: profile.ip_position.clone(),
             flop: flop_to_string(flop),
             starting_pot: profile.starting_pot,
-            effective_stack: profile.effective_stack,
-            tree_preset: profile.tree_preset.clone(),
+            effective_stack: stack.effective_stack,
+            tree_preset: profile.tree_config_label(),
             profile_fingerprint,
             oop_range_path: profile.oop_range_path.clone(),
             ip_range_path: profile.ip_range_path.clone(),
@@ -281,6 +354,22 @@ fn default_profile_weight() -> u32 {
     1
 }
 
+fn default_stack_weight() -> u32 {
+    1
+}
+
+fn default_add_allin_threshold() -> f64 {
+    1.5
+}
+
+fn default_force_allin_threshold() -> f64 {
+    0.15
+}
+
+fn default_merging_threshold() -> f64 {
+    0.1
+}
+
 pub fn validate_config(config: &TrainingConfig) -> Result<(), String> {
     if config.version != 1 {
         return Err(format!("unsupported config version: {}", config.version));
@@ -296,11 +385,41 @@ pub fn validate_config(config: &TrainingConfig) -> Result<(), String> {
         if !ids.insert(profile.id.as_str()) {
             return Err(format!("duplicate profile id: {}", profile.id));
         }
+        if profile.starting_pot <= 0 {
+            return Err(format!("startingPot must be positive for {}", profile.id));
+        }
         if profile.oop_range_path.as_os_str().is_empty() {
             return Err(format!("oopRangePath cannot be empty for {}", profile.id));
         }
         if profile.ip_range_path.as_os_str().is_empty() {
             return Err(format!("ipRangePath cannot be empty for {}", profile.id));
+        }
+
+        let stacks = profile.stack_variants_for_plan();
+        if stacks.is_empty() {
+            return Err(format!("stackVariants cannot be empty for {}", profile.id));
+        }
+
+        let mut seen_stacks = HashSet::new();
+        for stack in &stacks {
+            if stack.effective_stack <= 0 {
+                return Err(format!(
+                    "effectiveStack must be positive for {}",
+                    profile.id
+                ));
+            }
+            if !seen_stacks.insert(stack.effective_stack) {
+                return Err(format!(
+                    "duplicate effectiveStack {} for {}",
+                    stack.effective_stack, profile.id
+                ));
+            }
+            tree_config_for_profile(profile, stack.effective_stack).map_err(|err| {
+                format!(
+                    "invalid treeConfig for {} stack {}: {err}",
+                    profile.id, stack.effective_stack
+                )
+            })?;
         }
     }
 
@@ -373,6 +492,7 @@ pub fn flop_to_string(flop: [u8; 3]) -> String {
 
 pub fn output_relative_path(
     profile: &TrainingProfile,
+    effective_stack: i32,
     profile_fingerprint: &str,
     flop: [u8; 3],
 ) -> PathBuf {
@@ -384,17 +504,23 @@ pub fn output_relative_path(
             profile_fingerprint,
             flop_to_string(flop),
             profile.starting_pot,
-            profile.effective_stack
+            effective_stack
         ))
 }
 
 pub fn output_path(
     output_dir: &Path,
     profile: &TrainingProfile,
+    effective_stack: i32,
     profile_fingerprint: &str,
     flop: [u8; 3],
 ) -> PathBuf {
-    output_dir.join(output_relative_path(profile, profile_fingerprint, flop))
+    output_dir.join(output_relative_path(
+        profile,
+        effective_stack,
+        profile_fingerprint,
+        flop,
+    ))
 }
 
 pub fn load_profile_ranges(
@@ -459,22 +585,38 @@ pub fn range_fingerprint(oop_range: &str, ip_range: &str) -> String {
     fingerprint_payload(&payload)
 }
 
-pub fn profile_fingerprint(profile: &TrainingProfile, range_fingerprint: &str) -> String {
-    fingerprint_payload(&profile_fingerprint_payload(profile, range_fingerprint))
+pub fn profile_fingerprint(
+    profile: &TrainingProfile,
+    effective_stack: i32,
+    range_fingerprint: &str,
+) -> String {
+    fingerprint_payload(&profile_fingerprint_payload(
+        profile,
+        effective_stack,
+        range_fingerprint,
+    ))
 }
 
-fn profile_fingerprint_payload(profile: &TrainingProfile, range_fingerprint: &str) -> String {
+fn profile_fingerprint_payload(
+    profile: &TrainingProfile,
+    effective_stack: i32,
+    range_fingerprint: &str,
+) -> String {
     let mut payload = String::new();
     append_fingerprint_field(&mut payload, "id", &profile.id);
     append_fingerprint_field(&mut payload, "pot_type", &profile.pot_type);
     append_fingerprint_field(&mut payload, "oop_position", &profile.oop_position);
     append_fingerprint_field(&mut payload, "ip_position", &profile.ip_position);
     append_fingerprint_field(&mut payload, "starting_pot", profile.starting_pot);
-    append_fingerprint_field(&mut payload, "effective_stack", profile.effective_stack);
+    append_fingerprint_field(&mut payload, "effective_stack", effective_stack);
     append_fingerprint_field(&mut payload, "rake_rate_bits", profile.rake_rate.to_bits());
     append_fingerprint_field(&mut payload, "rake_cap_bits", profile.rake_cap.to_bits());
     append_fingerprint_field(&mut payload, "range_fingerprint", range_fingerprint);
-    append_fingerprint_field(&mut payload, "tree_preset", &profile.tree_preset);
+    append_fingerprint_field(
+        &mut payload,
+        "tree_config_label",
+        profile.tree_config_label(),
+    );
     append_fingerprint_field(
         &mut payload,
         "target_exploitability_bits",
@@ -486,7 +628,7 @@ fn profile_fingerprint_payload(profile: &TrainingProfile, range_fingerprint: &st
         "enable_compression",
         profile.enable_compression,
     );
-    append_tree_config_fingerprint(&mut payload, profile);
+    append_tree_config_fingerprint(&mut payload, profile, effective_stack);
 
     payload
 }
@@ -509,14 +651,12 @@ fn append_fingerprint_field<K: std::fmt::Display, T: std::fmt::Display>(
     let _ = writeln!(payload, "{key}={value}");
 }
 
-fn append_tree_config_fingerprint(payload: &mut String, profile: &TrainingProfile) {
-    match tree_config_for_preset(
-        &profile.tree_preset,
-        profile.starting_pot,
-        profile.effective_stack,
-        profile.rake_rate,
-        profile.rake_cap,
-    ) {
+fn append_tree_config_fingerprint(
+    payload: &mut String,
+    profile: &TrainingProfile,
+    effective_stack: i32,
+) {
+    match tree_config_for_profile(profile, effective_stack) {
         Ok(tree) => {
             append_fingerprint_field(payload, "tree_config_status", "ok");
             append_fingerprint_field(
@@ -651,19 +791,27 @@ pub fn build_job_plan(
 
         let seed = opts.seed.unwrap_or(profile.seed);
         let count = profile.flop_count.max(1);
-        for flop in sample_flops(seed, count) {
+        let flops = sample_flops(seed, count);
+        let stacks = profile.stack_variants_for_plan();
+        for flop in flops {
+            for stack in &stacks {
+                if opts.limit.is_some_and(|limit| jobs.len() >= limit) {
+                    break;
+                }
+
+                let mut job =
+                    JobManifestEntry::planned(profile, stack, loaded_ranges_ref, flop, output_dir);
+                if let Some(error) = &range_error {
+                    job.status = JobStatus::MissingRange;
+                    job.error = Some(error.clone());
+                } else if job.path.as_ref().is_some_and(|path| path.exists()) && !opts.overwrite {
+                    job.status = JobStatus::SkippedExisting;
+                }
+                jobs.push(job);
+            }
             if opts.limit.is_some_and(|limit| jobs.len() >= limit) {
                 break;
             }
-
-            let mut job = JobManifestEntry::planned(profile, loaded_ranges_ref, flop, output_dir);
-            if let Some(error) = &range_error {
-                job.status = JobStatus::MissingRange;
-                job.error = Some(error.clone());
-            } else if job.path.as_ref().is_some_and(|path| path.exists()) && !opts.overwrite {
-                job.status = JobStatus::SkippedExisting;
-            }
-            jobs.push(job);
         }
     }
 
@@ -683,49 +831,135 @@ pub fn tree_config_for_preset(
     rake_rate: f64,
     rake_cap: f64,
 ) -> Result<TreeConfig, String> {
-    let (flop_bet, flop_raise, turn_bet, turn_raise, river_bet, river_raise, donk) = match preset {
-        "standard_srp" => (
-            "30%,80%,150%",
-            "3x",
-            "30%,80%,150%",
-            "3x",
-            "30%,80%,150%",
-            "3x",
-            Some("50%"),
-        ),
-        "standard_3bp" => (
-            "30%,80%,150%",
-            "3x",
-            "30%,80%,150%",
-            "3x",
-            "30%,80%,150%",
-            "3x",
-            Some("50%"),
-        ),
-        "standard_4bp" => (
-            "30%,80%,150%",
-            "3x",
-            "30%,80%,150%",
-            "3x",
-            "30%,80%,150%",
-            "3x",
-            Some("50%"),
-        ),
-        "standard_dev" => ("50%", "3x", "50%", "3x", "50%", "3x", None),
-        other => return Err(format!("unknown tree preset: {other}")),
-    };
+    let tree = profile_tree_config_for_preset(preset)?;
+    tree_config_from_profile_tree(
+        &tree,
+        starting_pot,
+        effective_stack,
+        rake_rate,
+        rake_cap,
+        preset,
+    )
+}
+
+pub fn tree_config_for_profile(
+    profile: &TrainingProfile,
+    effective_stack: i32,
+) -> Result<TreeConfig, String> {
+    tree_config_for_profile_amounts(profile, profile.starting_pot, effective_stack)
+}
+
+fn tree_config_for_profile_amounts(
+    profile: &TrainingProfile,
+    starting_pot: i32,
+    effective_stack: i32,
+) -> Result<TreeConfig, String> {
+    let tree = profile_tree_config(profile)?;
+    tree_config_from_profile_tree(
+        &tree,
+        starting_pot,
+        effective_stack,
+        profile.rake_rate,
+        profile.rake_cap,
+        &profile.id,
+    )
+}
+
+fn profile_tree_config(profile: &TrainingProfile) -> Result<ProfileTreeConfig, String> {
+    if let Some(tree_config) = &profile.tree_config {
+        return Ok(tree_config.clone());
+    }
+
+    if let Some(preset) = &profile.tree_preset {
+        return profile_tree_config_for_preset(preset);
+    }
+
+    Err("profile must define treeConfig".to_string())
+}
+
+fn profile_tree_config_for_preset(preset: &str) -> Result<ProfileTreeConfig, String> {
+    match preset {
+        "standard_srp" | "standard_3bp" | "standard_4bp" => Ok(ProfileTreeConfig {
+            flop: ProfileStreetTreeConfig {
+                oop_bet: "30%,80%,150%".to_string(),
+                ip_bet: "30%,80%,150%".to_string(),
+                raise: "3x".to_string(),
+                donk: None,
+            },
+            turn: ProfileStreetTreeConfig {
+                oop_bet: "30%,80%,150%".to_string(),
+                ip_bet: "30%,80%,150%".to_string(),
+                raise: "3x".to_string(),
+                donk: Some("50%".to_string()),
+            },
+            river: ProfileStreetTreeConfig {
+                oop_bet: "30%,80%,150%".to_string(),
+                ip_bet: "30%,80%,150%".to_string(),
+                raise: "3x".to_string(),
+                donk: Some("50%".to_string()),
+            },
+            add_allin_threshold: default_add_allin_threshold(),
+            force_allin_threshold: default_force_allin_threshold(),
+            merging_threshold: default_merging_threshold(),
+        }),
+        "standard_dev" => Ok(ProfileTreeConfig {
+            flop: ProfileStreetTreeConfig {
+                oop_bet: "50%".to_string(),
+                ip_bet: "50%".to_string(),
+                raise: "3x".to_string(),
+                donk: None,
+            },
+            turn: ProfileStreetTreeConfig {
+                oop_bet: "50%".to_string(),
+                ip_bet: "50%".to_string(),
+                raise: "3x".to_string(),
+                donk: None,
+            },
+            river: ProfileStreetTreeConfig {
+                oop_bet: "50%".to_string(),
+                ip_bet: "50%".to_string(),
+                raise: "3x".to_string(),
+                donk: None,
+            },
+            add_allin_threshold: default_add_allin_threshold(),
+            force_allin_threshold: default_force_allin_threshold(),
+            merging_threshold: default_merging_threshold(),
+        }),
+        other => Err(format!("unknown tree preset: {other}")),
+    }
+}
+
+fn tree_config_from_profile_tree(
+    tree: &ProfileTreeConfig,
+    starting_pot: i32,
+    effective_stack: i32,
+    rake_rate: f64,
+    rake_cap: f64,
+    label: &str,
+) -> Result<TreeConfig, String> {
+    let flop_oop_bet = tree
+        .flop
+        .donk
+        .as_deref()
+        .unwrap_or(tree.flop.oop_bet.as_str());
 
     let flop_sizes = [
-        bet_size_options(flop_bet, flop_raise)?,
-        bet_size_options(flop_bet, flop_raise)?,
+        bet_size_options(flop_oop_bet, &tree.flop.raise)
+            .map_err(|err| format!("invalid flop OOP sizes for {label}: {err}"))?,
+        bet_size_options(&tree.flop.ip_bet, &tree.flop.raise)
+            .map_err(|err| format!("invalid flop IP sizes for {label}: {err}"))?,
     ];
     let turn_sizes = [
-        bet_size_options(turn_bet, turn_raise)?,
-        bet_size_options(turn_bet, turn_raise)?,
+        bet_size_options(&tree.turn.oop_bet, &tree.turn.raise)
+            .map_err(|err| format!("invalid turn OOP sizes for {label}: {err}"))?,
+        bet_size_options(&tree.turn.ip_bet, &tree.turn.raise)
+            .map_err(|err| format!("invalid turn IP sizes for {label}: {err}"))?,
     ];
     let river_sizes = [
-        bet_size_options(river_bet, river_raise)?,
-        bet_size_options(river_bet, river_raise)?,
+        bet_size_options(&tree.river.oop_bet, &tree.river.raise)
+            .map_err(|err| format!("invalid river OOP sizes for {label}: {err}"))?,
+        bet_size_options(&tree.river.ip_bet, &tree.river.raise)
+            .map_err(|err| format!("invalid river IP sizes for {label}: {err}"))?,
     ];
 
     Ok(TreeConfig {
@@ -737,17 +971,23 @@ pub fn tree_config_for_preset(
         flop_bet_sizes: flop_sizes,
         turn_bet_sizes: turn_sizes,
         river_bet_sizes: river_sizes,
-        turn_donk_sizes: donk
+        turn_donk_sizes: tree
+            .turn
+            .donk
+            .as_deref()
             .map(DonkSizeOptions::try_from)
             .transpose()
-            .map_err(|err| format!("invalid turn donk size for {preset}: {err}"))?,
-        river_donk_sizes: donk
+            .map_err(|err| format!("invalid turn donk size for {label}: {err}"))?,
+        river_donk_sizes: tree
+            .river
+            .donk
+            .as_deref()
             .map(DonkSizeOptions::try_from)
             .transpose()
-            .map_err(|err| format!("invalid river donk size for {preset}: {err}"))?,
-        add_allin_threshold: 1.5,
-        force_allin_threshold: 0.15,
-        merging_threshold: 0.1,
+            .map_err(|err| format!("invalid river donk size for {label}: {err}"))?,
+        add_allin_threshold: tree.add_allin_threshold,
+        force_allin_threshold: tree.force_allin_threshold,
+        merging_threshold: tree.merging_threshold,
     })
 }
 
@@ -809,15 +1049,10 @@ fn execute_job_with_progress<W: IoWrite>(
         job,
         &start,
         "build_tree",
-        &format!("preset={}", profile.tree_preset),
+        &format!("tree={}", job.tree_preset),
     )?;
-    let tree_config = tree_config_for_preset(
-        &profile.tree_preset,
-        profile.starting_pot,
-        profile.effective_stack,
-        profile.rake_rate,
-        profile.rake_cap,
-    )?;
+    let tree_config =
+        tree_config_for_profile_amounts(profile, job.starting_pot, job.effective_stack)?;
     let action_tree = ActionTree::new(tree_config)
         .map_err(|err| format!("failed to build action tree for {}: {err}", profile.id))?;
     let mut game = PostFlopGame::with_config(card_config, action_tree)
@@ -862,10 +1097,12 @@ fn execute_job_with_progress<W: IoWrite>(
     }
 
     let memo = format!(
-        "profile={},spot={},flop={},profile_fingerprint={},range_fingerprint={}",
+        "profile={},spot={},flop={},starting_pot={},effective_stack={},profile_fingerprint={},range_fingerprint={}",
         profile.id,
         profile.spot,
         flop_to_string(flop),
+        job.starting_pot,
+        job.effective_stack,
         job.profile_fingerprint,
         ranges.range_fingerprint
     );
@@ -888,10 +1125,10 @@ fn execute_job_with_progress<W: IoWrite>(
             flop_to_string(loaded.card_config().flop)
         ));
     }
-    if loaded.tree_config().starting_pot != profile.starting_pot {
+    if loaded.tree_config().starting_pot != job.starting_pot {
         return Err("verified file has unexpected starting pot".to_string());
     }
-    if loaded.tree_config().effective_stack != profile.effective_stack {
+    if loaded.tree_config().effective_stack != job.effective_stack {
         return Err("verified file has unexpected effective stack".to_string());
     }
 
@@ -1138,8 +1375,14 @@ fn run_cli_with_writer<W: IoWrite>(opts: CliOptions, progress: &mut W) -> Result
             {
                 let job = &mut manifest.jobs[index];
                 job.range_fingerprint = ranges.range_fingerprint.clone();
-                job.profile_fingerprint = profile_fingerprint(profile, &job.range_fingerprint);
-                let relative_path = output_relative_path(profile, &job.profile_fingerprint, flop);
+                job.profile_fingerprint =
+                    profile_fingerprint(profile, job.effective_stack, &job.range_fingerprint);
+                let relative_path = output_relative_path(
+                    profile,
+                    job.effective_stack,
+                    &job.profile_fingerprint,
+                    flop,
+                );
                 job.output_relative_path = Some(relative_path.clone());
                 job.path = Some(output_dir.join(relative_path));
             }
@@ -1364,6 +1607,42 @@ mod tests {
     use std::collections::BTreeSet;
     use std::path::{Path, PathBuf};
 
+    fn street_tree(
+        oop_bet: &str,
+        ip_bet: &str,
+        raise: &str,
+        donk: Option<&str>,
+    ) -> ProfileStreetTreeConfig {
+        ProfileStreetTreeConfig {
+            oop_bet: oop_bet.to_string(),
+            ip_bet: ip_bet.to_string(),
+            raise: raise.to_string(),
+            donk: donk.map(str::to_string),
+        }
+    }
+
+    fn standard_profile_tree_config() -> ProfileTreeConfig {
+        ProfileTreeConfig {
+            flop: street_tree("50%", "30%,80%,150%", "3x", Some("50%")),
+            turn: street_tree("30%,80%,150%", "30%,80%,150%", "3x", Some("50%")),
+            river: street_tree("30%,80%,150%", "30%,80%,150%", "3x", Some("50%")),
+            add_allin_threshold: 1.5,
+            force_allin_threshold: 0.15,
+            merging_threshold: 0.1,
+        }
+    }
+
+    fn dev_profile_tree_config() -> ProfileTreeConfig {
+        ProfileTreeConfig {
+            flop: street_tree("50%", "50%", "3x", None),
+            turn: street_tree("50%", "50%", "3x", None),
+            river: street_tree("50%", "50%", "3x", None),
+            add_allin_threshold: 1.5,
+            force_allin_threshold: 0.15,
+            merging_threshold: 0.1,
+        }
+    }
+
     fn path_profile(id: &str, oop_range_path: PathBuf, ip_range_path: PathBuf) -> TrainingProfile {
         TrainingProfile {
             id: id.to_string(),
@@ -1373,13 +1652,18 @@ mod tests {
             pot_type: "2bp".to_string(),
             oop_position: "BB".to_string(),
             ip_position: "BTN".to_string(),
-            starting_pot: 550,
-            effective_stack: 10000,
+            starting_pot: 6,
+            effective_stack: None,
+            stack_variants: vec![StackVariant {
+                effective_stack: 100,
+                weight: 1,
+            }],
             rake_rate: 0.0,
             rake_cap: 0.0,
             oop_range_path,
             ip_range_path,
-            tree_preset: "standard_srp".to_string(),
+            tree_preset: None,
+            tree_config: Some(standard_profile_tree_config()),
             flop_count: 10,
             seed: 1,
             target_exploitability: 0.3,
@@ -1402,18 +1686,18 @@ mod tests {
             target_exploitability: 10_000.0,
             max_iterations: 1,
             enable_compression: false,
-            ..runnable_profile("smoke_2bp_btn_vs_bb_100bb")
+            ..runnable_profile("smoke_2bp_btn_vs_bb")
         }
     }
 
     fn dev_iteration_profile() -> TrainingProfile {
         TrainingProfile {
-            tree_preset: "standard_dev".to_string(),
+            tree_config: Some(dev_profile_tree_config()),
             flop_count: 1,
             target_exploitability: -1.0,
             max_iterations: 1,
             enable_compression: false,
-            ..runnable_profile("dev_2bp_btn_vs_bb_100bb")
+            ..runnable_profile("dev_2bp_btn_vs_bb")
         }
     }
 
@@ -1423,6 +1707,10 @@ mod tests {
             ip_range: "KK".to_string(),
             range_fingerprint: range_fingerprint("AA", "KK"),
         }
+    }
+
+    fn first_stack(profile: &TrainingProfile) -> StackVariant {
+        profile.stack_variants_for_plan()[0].clone()
     }
 
     #[test]
@@ -1452,13 +1740,23 @@ mod tests {
             "potType": "2bp",
             "oopPosition": "BB",
             "ipPosition": "BTN",
-            "startingPot": 550,
-            "effectiveStack": 10000,
+            "startingPot": 6,
+            "stackVariants": [
+                { "effectiveStack": 100, "weight": 50 },
+                { "effectiveStack": 200, "weight": 50 }
+            ],
             "rakeRate": 0.0,
             "rakeCap": 0.0,
             "oopRangePath": "../ranges/oop.txt",
             "ipRangePath": "../ranges/ip.txt",
-            "treePreset": "standard_srp",
+            "treeConfig": {
+                "flop": { "oopBet": "50%", "ipBet": "30%,80%,150%", "raise": "3x", "donk": "50%" },
+                "turn": { "oopBet": "30%,80%,150%", "ipBet": "30%,80%,150%", "raise": "3x", "donk": "50%" },
+                "river": { "oopBet": "30%,80%,150%", "ipBet": "30%,80%,150%", "raise": "3x", "donk": "50%" },
+                "addAllinThreshold": 1.5,
+                "forceAllinThreshold": 0.15,
+                "mergingThreshold": 0.1
+            },
             "flopCount": 1,
             "seed": 1,
             "targetExploitability": 0.3,
@@ -1468,6 +1766,22 @@ mod tests {
         let profile: TrainingProfile = serde_json::from_str(raw).unwrap();
         assert_eq!(profile.oop_range_path, PathBuf::from("../ranges/oop.txt"));
         assert_eq!(profile.ip_range_path, PathBuf::from("../ranges/ip.txt"));
+        assert_eq!(
+            profile.stack_variants,
+            vec![
+                StackVariant {
+                    effective_stack: 100,
+                    weight: 50,
+                },
+                StackVariant {
+                    effective_stack: 200,
+                    weight: 50,
+                }
+            ]
+        );
+        let tree = tree_config_for_profile(&profile, 100).unwrap();
+        assert_eq!(tree.starting_pot, 6);
+        assert_eq!(tree.effective_stack, 100);
     }
 
     #[test]
@@ -1584,15 +1898,21 @@ mod tests {
 
     #[test]
     fn output_path_uses_profile_flop_pot_and_stack() {
-        let profile = runnable_profile("2bp_btn_vs_bb_100bb");
+        let profile = runnable_profile("2bp_btn_vs_bb");
         let ranges = smoke_ranges();
         let flop = [51, 21, 0];
-        let fingerprint = profile_fingerprint(&profile, &ranges.range_fingerprint);
-        let path = output_path(Path::new("training-games"), &profile, &fingerprint, flop);
+        let fingerprint = profile_fingerprint(&profile, 100, &ranges.range_fingerprint);
+        let path = output_path(
+            Path::new("training-games"),
+            &profile,
+            100,
+            &fingerprint,
+            flop,
+        );
         assert_eq!(
             path,
             PathBuf::from(format!(
-                "training-games/2bp/2bp_btn_vs_bb_100bb/2bp_btn_vs_bb_100bb__cfg{fingerprint}__flop_2c7dAs__pot550__stack10000.bin"
+                "training-games/2bp/2bp_btn_vs_bb/2bp_btn_vs_bb__cfg{fingerprint}__flop_2c7dAs__pot6__stack100.bin"
             ))
         );
     }
@@ -1604,11 +1924,13 @@ mod tests {
         let original_range_fingerprint = range_fingerprint("AA", "KK");
         let changed_range_fingerprint = range_fingerprint("QQ", "KK");
         let original_profile_fingerprint =
-            profile_fingerprint(&profile, &original_range_fingerprint);
-        let changed_profile_fingerprint = profile_fingerprint(&profile, &changed_range_fingerprint);
+            profile_fingerprint(&profile, 100, &original_range_fingerprint);
+        let changed_profile_fingerprint =
+            profile_fingerprint(&profile, 100, &changed_range_fingerprint);
         let original = output_path(
             Path::new("training-games"),
             &profile,
+            100,
             &original_profile_fingerprint,
             flop,
         );
@@ -1616,6 +1938,7 @@ mod tests {
         let changed = output_path(
             Path::new("training-games"),
             &profile,
+            100,
             &changed_profile_fingerprint,
             flop,
         );
@@ -1627,16 +1950,66 @@ mod tests {
     fn profile_fingerprint_payload_includes_expanded_tree_sizes() {
         let profile = runnable_profile("p1");
         let ranges = smoke_ranges();
-        let payload = profile_fingerprint_payload(&profile, &ranges.range_fingerprint);
+        let payload = profile_fingerprint_payload(&profile, 100, &ranges.range_fingerprint);
         let bet_sizes = [0.3_f64, 0.8, 1.5]
             .map(|value| format!("pot:{:016x}", value.to_bits()))
             .join(",");
+        let flop_donk_size = format!("pot:{:016x}", 0.5_f64.to_bits());
         let raise_size = format!("prev:{:016x}", 3.0_f64.to_bits());
         let donk_size = format!("pot:{:016x}", 0.5_f64.to_bits());
 
-        assert!(payload.contains(&format!("tree_flop_oop_bet={bet_sizes}")));
+        assert!(payload.contains(&format!("tree_flop_oop_bet={flop_donk_size}")));
+        assert!(payload.contains(&format!("tree_flop_ip_bet={bet_sizes}")));
         assert!(payload.contains(&format!("tree_turn_ip_raise={raise_size}")));
         assert!(payload.contains(&format!("tree_river_donk={donk_size}")));
+    }
+
+    #[test]
+    fn build_plan_expands_stack_variants_with_weights() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("oop.txt"), "AA").unwrap();
+        std::fs::write(tmp.path().join("ip.txt"), "KK").unwrap();
+        let mut profile = minimal_profile("p1");
+        profile.flop_count = 2;
+        profile.stack_variants = vec![
+            StackVariant {
+                effective_stack: 100,
+                weight: 50,
+            },
+            StackVariant {
+                effective_stack: 200,
+                weight: 50,
+            },
+        ];
+        let cfg = TrainingConfig {
+            version: 1,
+            profiles: vec![profile],
+        };
+
+        let plan = build_job_plan(
+            &cfg,
+            &tmp.path().join("config.json"),
+            Path::new("out"),
+            &RunOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(plan.jobs.len(), 4);
+        assert_eq!(
+            plan.jobs
+                .iter()
+                .map(|job| (job.effective_stack, job.stack_weight))
+                .collect::<Vec<_>>(),
+            vec![(100, 50), (200, 50), (100, 50), (200, 50)]
+        );
+        assert!(plan.jobs.iter().all(|job| {
+            job.output_relative_path
+                .as_ref()
+                .unwrap()
+                .display()
+                .to_string()
+                .contains(&format!("stack{}", job.effective_stack))
+        }));
     }
 
     #[test]
@@ -1738,7 +2111,13 @@ mod tests {
         let profile = smoke_profile();
         let ranges = smoke_ranges();
         let flop = [48, 32, 16];
-        let mut job = JobManifestEntry::planned(&profile, Some(&ranges), flop, tmp.path());
+        let mut job = JobManifestEntry::planned(
+            &profile,
+            &first_stack(&profile),
+            Some(&ranges),
+            flop,
+            tmp.path(),
+        );
         execute_job(&profile, &ranges, flop, &mut job, true).unwrap();
         assert_eq!(job.status, JobStatus::Solved);
         let (_game, _memo): (postflop_solver::PostFlopGame, _) =
@@ -1751,7 +2130,13 @@ mod tests {
         let profile = smoke_profile();
         let ranges = smoke_ranges();
         let flop = [48, 32, 16];
-        let mut job = JobManifestEntry::planned(&profile, Some(&ranges), flop, tmp.path());
+        let mut job = JobManifestEntry::planned(
+            &profile,
+            &first_stack(&profile),
+            Some(&ranges),
+            flop,
+            tmp.path(),
+        );
         execute_job(&profile, &ranges, flop, &mut job, true).unwrap();
         assert_eq!(job.iterations_completed, 0);
     }
@@ -1832,8 +2217,8 @@ mod tests {
 
         let output = String::from_utf8(output).unwrap();
         assert!(output.contains("precompute jobs: total=1 planned=1"));
-        assert!(output.contains("[0/1 0%] solving smoke_2bp_btn_vs_bb_100bb"));
-        assert!(output.contains("[1/1 100%] solved smoke_2bp_btn_vs_bb_100bb"));
+        assert!(output.contains("[0/1 0%] solving smoke_2bp_btn_vs_bb"));
+        assert!(output.contains("[1/1 100%] solved smoke_2bp_btn_vs_bb"));
         assert!(output.contains("flop="));
         assert!(output.contains(".bin"));
     }
@@ -1870,7 +2255,7 @@ mod tests {
         assert!(output.contains("elapsed_ms="));
         assert!(output.contains("stage=parse_ranges elapsed_ms="));
         assert!(output.contains("stage=build_tree elapsed_ms="));
-        assert!(output.contains("preset=standard_dev"));
+        assert!(output.contains("tree=profile"));
         assert!(output.contains("stage=memory_estimate elapsed_ms="));
         assert!(output.contains("stage=allocate_memory elapsed_ms="));
         assert!(output.contains("compression=false"));
@@ -1890,7 +2275,8 @@ mod tests {
 
         assert_eq!(config.profiles.len(), 1);
         let profile = &config.profiles[0];
-        assert_eq!(profile.tree_preset, "standard_dev");
+        assert!(profile.tree_config.is_some());
+        assert_eq!(profile.tree_config_label(), "profile");
         assert_eq!(profile.flop_count, 1);
         assert!(profile.max_iterations <= 10);
         assert_eq!(profile.target_exploitability, 10_000.0);

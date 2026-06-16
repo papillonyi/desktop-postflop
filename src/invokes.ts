@@ -554,6 +554,7 @@ export type TrainingSession = {
   root: string;
   profileId: string;
   profileWeight: number;
+  stackWeight: number;
   spot: string;
   potType: TrainingPotType;
   oopPosition: TrainingPosition;
