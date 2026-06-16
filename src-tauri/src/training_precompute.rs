@@ -2,13 +2,14 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fmt::Write as _;
+use std::io::{self, Write as IoWrite};
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use postflop_solver::{
     compute_exploitability, finalize, load_data_from_file, save_data_to_file, solve_step,
-    ActionTree, BetSizeOptions, BoardState, CardConfig, DonkSizeOptions, PostFlopGame, TreeConfig,
-    NOT_DEALT,
+    ActionTree, BetSize, BetSizeOptions, BoardState, CardConfig, DonkSizeOptions, PostFlopGame,
+    TreeConfig, NOT_DEALT,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -459,6 +460,10 @@ pub fn range_fingerprint(oop_range: &str, ip_range: &str) -> String {
 }
 
 pub fn profile_fingerprint(profile: &TrainingProfile, range_fingerprint: &str) -> String {
+    fingerprint_payload(&profile_fingerprint_payload(profile, range_fingerprint))
+}
+
+fn profile_fingerprint_payload(profile: &TrainingProfile, range_fingerprint: &str) -> String {
     let mut payload = String::new();
     append_fingerprint_field(&mut payload, "id", &profile.id);
     append_fingerprint_field(&mut payload, "pot_type", &profile.pot_type);
@@ -481,8 +486,9 @@ pub fn profile_fingerprint(profile: &TrainingProfile, range_fingerprint: &str) -
         "enable_compression",
         profile.enable_compression,
     );
+    append_tree_config_fingerprint(&mut payload, profile);
 
-    fingerprint_payload(&payload)
+    payload
 }
 
 fn fingerprint_payload(payload: &str) -> String {
@@ -495,8 +501,114 @@ fn fingerprint_payload(payload: &str) -> String {
     format!("{hash:016x}")
 }
 
-fn append_fingerprint_field<T: std::fmt::Display>(payload: &mut String, key: &str, value: T) {
+fn append_fingerprint_field<K: std::fmt::Display, T: std::fmt::Display>(
+    payload: &mut String,
+    key: K,
+    value: T,
+) {
     let _ = writeln!(payload, "{key}={value}");
+}
+
+fn append_tree_config_fingerprint(payload: &mut String, profile: &TrainingProfile) {
+    match tree_config_for_preset(
+        &profile.tree_preset,
+        profile.starting_pot,
+        profile.effective_stack,
+        profile.rake_rate,
+        profile.rake_cap,
+    ) {
+        Ok(tree) => {
+            append_fingerprint_field(payload, "tree_config_status", "ok");
+            append_fingerprint_field(
+                payload,
+                "tree_initial_state",
+                format!("{:?}", tree.initial_state),
+            );
+            append_bet_size_options_fingerprint(payload, "tree_flop_oop", &tree.flop_bet_sizes[0]);
+            append_bet_size_options_fingerprint(payload, "tree_flop_ip", &tree.flop_bet_sizes[1]);
+            append_bet_size_options_fingerprint(payload, "tree_turn_oop", &tree.turn_bet_sizes[0]);
+            append_bet_size_options_fingerprint(payload, "tree_turn_ip", &tree.turn_bet_sizes[1]);
+            append_bet_size_options_fingerprint(
+                payload,
+                "tree_river_oop",
+                &tree.river_bet_sizes[0],
+            );
+            append_bet_size_options_fingerprint(payload, "tree_river_ip", &tree.river_bet_sizes[1]);
+            append_donk_size_options_fingerprint(
+                payload,
+                "tree_turn_donk",
+                tree.turn_donk_sizes.as_ref(),
+            );
+            append_donk_size_options_fingerprint(
+                payload,
+                "tree_river_donk",
+                tree.river_donk_sizes.as_ref(),
+            );
+            append_fingerprint_field(
+                payload,
+                "tree_add_allin_threshold_bits",
+                tree.add_allin_threshold.to_bits(),
+            );
+            append_fingerprint_field(
+                payload,
+                "tree_force_allin_threshold_bits",
+                tree.force_allin_threshold.to_bits(),
+            );
+            append_fingerprint_field(
+                payload,
+                "tree_merging_threshold_bits",
+                tree.merging_threshold.to_bits(),
+            );
+        }
+        Err(err) => {
+            append_fingerprint_field(payload, "tree_config_status", "error");
+            append_fingerprint_field(payload, "tree_config_error", err);
+        }
+    }
+}
+
+fn append_bet_size_options_fingerprint(payload: &mut String, key: &str, options: &BetSizeOptions) {
+    append_fingerprint_field(
+        payload,
+        format!("{key}_bet"),
+        bet_size_list_fingerprint(&options.bet),
+    );
+    append_fingerprint_field(
+        payload,
+        format!("{key}_raise"),
+        bet_size_list_fingerprint(&options.raise),
+    );
+}
+
+fn append_donk_size_options_fingerprint(
+    payload: &mut String,
+    key: &str,
+    options: Option<&DonkSizeOptions>,
+) {
+    let value = options
+        .map(|options| bet_size_list_fingerprint(&options.donk))
+        .unwrap_or_else(|| "none".to_string());
+    append_fingerprint_field(payload, key, value);
+}
+
+fn bet_size_list_fingerprint(sizes: &[BetSize]) -> String {
+    sizes
+        .iter()
+        .map(bet_size_fingerprint)
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn bet_size_fingerprint(size: &BetSize) -> String {
+    match *size {
+        BetSize::PotRelative(value) => format!("pot:{:016x}", value.to_bits()),
+        BetSize::PrevBetRelative(value) => format!("prev:{:016x}", value.to_bits()),
+        BetSize::Additive(size, cap) => format!("add:{size}:{cap}"),
+        BetSize::Geometric(streets, max_pot_relative) => {
+            format!("geo:{streets}:{:016x}", max_pot_relative.to_bits())
+        }
+        BetSize::AllIn => "allin".to_string(),
+    }
 }
 
 pub fn build_job_plan(
@@ -573,12 +685,32 @@ pub fn tree_config_for_preset(
 ) -> Result<TreeConfig, String> {
     let (flop_bet, flop_raise, turn_bet, turn_raise, river_bet, river_raise, donk) = match preset {
         "standard_srp" => (
-            "50%,75%", "2.5x", "50%,75%", "2.5x", "50%,75%", "2.5x", "50%",
+            "30%,80%,150%",
+            "3x",
+            "30%,80%,150%",
+            "3x",
+            "30%,80%,150%",
+            "3x",
+            "30%,80%,150%",
         ),
         "standard_3bp" => (
-            "33%,75%", "2.5x", "50%,75%", "2.5x", "50%,75%", "2.5x", "50%",
+            "30%,80%,150%",
+            "3x",
+            "30%,80%,150%",
+            "3x",
+            "30%,80%,150%",
+            "3x",
+            "30%,80%,150%",
         ),
-        "standard_4bp" => ("25%,50%", "2.5x", "50%", "2.5x", "50%", "2.5x", "50%"),
+        "standard_4bp" => (
+            "30%,80%,150%",
+            "3x",
+            "30%,80%,150%",
+            "3x",
+            "30%,80%,150%",
+            "3x",
+            "30%,80%,150%",
+        ),
         other => return Err(format!("unknown tree preset: {other}")),
     };
 
@@ -751,6 +883,12 @@ fn solve_with_report(
 }
 
 pub fn run_cli(opts: CliOptions) -> Result<(), String> {
+    let stdout = io::stdout();
+    let mut stdout = stdout.lock();
+    run_cli_with_writer(opts, &mut stdout)
+}
+
+fn run_cli_with_writer<W: IoWrite>(opts: CliOptions, progress: &mut W) -> Result<(), String> {
     let raw_config = std::fs::read_to_string(&opts.config_path).map_err(|err| {
         format!(
             "failed to read config {}: {err}",
@@ -774,13 +912,28 @@ pub fn run_cli(opts: CliOptions) -> Result<(), String> {
     let mut manifest = build_job_plan(&config, &opts.config_path, &opts.output_dir, &run_options)?;
     manifest.config_path = Some(opts.config_path.clone());
     write_manifest(&manifest)?;
+    write_plan_progress(progress, &manifest, run_options.dry_run)?;
 
     if !run_options.dry_run {
         let output_dir = manifest.output_dir.clone();
+        let planned_total = manifest
+            .jobs
+            .iter()
+            .filter(|job| job.status == JobStatus::Planned)
+            .count();
+        let mut completed = 0usize;
         for index in 0..manifest.jobs.len() {
             if manifest.jobs[index].status != JobStatus::Planned {
                 continue;
             }
+
+            write_job_progress(
+                progress,
+                completed,
+                planned_total,
+                "solving",
+                &manifest.jobs[index],
+            )?;
 
             let profile_id = manifest.jobs[index].profile_id.clone();
             let Some(profile) = config
@@ -791,6 +944,14 @@ pub fn run_cli(opts: CliOptions) -> Result<(), String> {
                 manifest.jobs[index].status = JobStatus::Failed;
                 manifest.jobs[index].error = Some(format!("profile not found: {profile_id}"));
                 write_manifest(&manifest)?;
+                completed += 1;
+                write_job_progress(
+                    progress,
+                    completed,
+                    planned_total,
+                    job_status_label(manifest.jobs[index].status),
+                    &manifest.jobs[index],
+                )?;
                 continue;
             };
 
@@ -801,6 +962,14 @@ pub fn run_cli(opts: CliOptions) -> Result<(), String> {
                     manifest.jobs[index].status = JobStatus::Failed;
                     manifest.jobs[index].error = Some(err);
                     write_manifest(&manifest)?;
+                    completed += 1;
+                    write_job_progress(
+                        progress,
+                        completed,
+                        planned_total,
+                        job_status_label(manifest.jobs[index].status),
+                        &manifest.jobs[index],
+                    )?;
                     continue;
                 }
             };
@@ -811,6 +980,14 @@ pub fn run_cli(opts: CliOptions) -> Result<(), String> {
                     manifest.jobs[index].status = JobStatus::MissingRange;
                     manifest.jobs[index].error = Some(err);
                     write_manifest(&manifest)?;
+                    completed += 1;
+                    write_job_progress(
+                        progress,
+                        completed,
+                        planned_total,
+                        job_status_label(manifest.jobs[index].status),
+                        &manifest.jobs[index],
+                    )?;
                     continue;
                 }
             };
@@ -833,10 +1010,93 @@ pub fn run_cli(opts: CliOptions) -> Result<(), String> {
                 manifest.jobs[index].error = Some(err);
             }
             write_manifest(&manifest)?;
+            completed += 1;
+            write_job_progress(
+                progress,
+                completed,
+                planned_total,
+                job_status_label(manifest.jobs[index].status),
+                &manifest.jobs[index],
+            )?;
         }
     }
 
     Ok(())
+}
+
+fn write_plan_progress<W: IoWrite>(
+    progress: &mut W,
+    manifest: &Manifest,
+    dry_run: bool,
+) -> Result<(), String> {
+    let planned = manifest
+        .jobs
+        .iter()
+        .filter(|job| job.status == JobStatus::Planned)
+        .count();
+    let skipped_existing = manifest
+        .jobs
+        .iter()
+        .filter(|job| job.status == JobStatus::SkippedExisting)
+        .count();
+    let missing_range = manifest
+        .jobs
+        .iter()
+        .filter(|job| job.status == JobStatus::MissingRange)
+        .count();
+
+    writeln!(
+        progress,
+        "precompute jobs: total={} planned={} skipped_existing={} missing_range={} dry_run={}",
+        manifest.jobs.len(),
+        planned,
+        skipped_existing,
+        missing_range,
+        dry_run
+    )
+    .map_err(|err| format!("failed to write progress: {err}"))
+}
+
+fn write_job_progress<W: IoWrite>(
+    progress: &mut W,
+    current: usize,
+    total: usize,
+    status: &str,
+    job: &JobManifestEntry,
+) -> Result<(), String> {
+    let percent = if total == 0 {
+        100
+    } else {
+        (current * 100) / total
+    };
+    let output = job
+        .output_relative_path
+        .as_ref()
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|| "<no-output>".to_string());
+
+    writeln!(
+        progress,
+        "[{current}/{total} {percent}%] {status} {} flop={} output={} iterations={} exploitability={}",
+        job.profile_id,
+        job.flop,
+        output,
+        job.iterations_completed,
+        job.final_exploitability
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "n/a".to_string())
+    )
+    .map_err(|err| format!("failed to write progress: {err}"))
+}
+
+fn job_status_label(status: JobStatus) -> &'static str {
+    match status {
+        JobStatus::Planned => "planned",
+        JobStatus::SkippedExisting => "skipped_existing",
+        JobStatus::MissingRange => "missing_range",
+        JobStatus::Solved => "solved",
+        JobStatus::Failed => "failed",
+    }
 }
 
 fn write_manifest(manifest: &Manifest) -> Result<(), String> {
@@ -1197,6 +1457,21 @@ mod tests {
     }
 
     #[test]
+    fn profile_fingerprint_payload_includes_expanded_tree_sizes() {
+        let profile = runnable_profile("p1");
+        let ranges = smoke_ranges();
+        let payload = profile_fingerprint_payload(&profile, &ranges.range_fingerprint);
+        let bet_sizes = [0.3_f64, 0.8, 1.5]
+            .map(|value| format!("pot:{:016x}", value.to_bits()))
+            .join(",");
+        let raise_size = format!("prev:{:016x}", 3.0_f64.to_bits());
+
+        assert!(payload.contains(&format!("tree_flop_oop_bet={bet_sizes}")));
+        assert!(payload.contains(&format!("tree_turn_ip_raise={raise_size}")));
+        assert!(payload.contains(&format!("tree_river_donk={bet_sizes}")));
+    }
+
+    #[test]
     fn build_plan_marks_missing_ranges_without_solving() {
         let cfg = TrainingConfig {
             version: 1,
@@ -1217,6 +1492,59 @@ mod tests {
         assert!(tree_config_for_preset("standard_srp", 550, 10000, 0.0, 0.0).is_ok());
         assert!(tree_config_for_preset("standard_3bp", 2100, 10000, 0.0, 0.0).is_ok());
         assert!(tree_config_for_preset("standard_4bp", 4500, 10000, 0.0, 0.0).is_ok());
+    }
+
+    #[test]
+    fn training_presets_use_uniform_bet_and_raise_sizes() {
+        use postflop_solver::BetSize::{PotRelative, PrevBetRelative};
+
+        for preset in ["standard_srp", "standard_3bp", "standard_4bp"] {
+            let tree = tree_config_for_preset(preset, 550, 10000, 0.0, 0.0).unwrap();
+
+            for options in tree
+                .flop_bet_sizes
+                .iter()
+                .chain(tree.turn_bet_sizes.iter())
+                .chain(tree.river_bet_sizes.iter())
+            {
+                assert_eq!(options.bet.len(), 3, "{preset} should have three bet sizes");
+                for (actual, expected) in options.bet.iter().zip([0.3, 0.8, 1.5]) {
+                    let PotRelative(actual) = actual else {
+                        panic!("{preset} contains a non-pot-relative bet size");
+                    };
+                    assert!(
+                        (actual - expected).abs() < 1e-9,
+                        "{preset} expected {expected}, got {actual}"
+                    );
+                }
+
+                assert_eq!(
+                    options.raise,
+                    vec![PrevBetRelative(3.0)],
+                    "{preset} should use 3x raises"
+                );
+            }
+
+            for options in [
+                tree.turn_donk_sizes.as_ref().unwrap(),
+                tree.river_donk_sizes.as_ref().unwrap(),
+            ] {
+                assert_eq!(
+                    options.donk.len(),
+                    3,
+                    "{preset} should have three donk bet sizes"
+                );
+                for (actual, expected) in options.donk.iter().zip([0.3, 0.8, 1.5]) {
+                    let PotRelative(actual) = actual else {
+                        panic!("{preset} contains a non-pot-relative donk bet size");
+                    };
+                    assert!(
+                        (actual - expected).abs() < 1e-9,
+                        "{preset} expected donk {expected}, got {actual}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
@@ -1274,7 +1602,11 @@ mod tests {
             overwrite: false,
             dry_run: true,
         };
-        run_cli(opts).unwrap();
+        let mut output = Vec::new();
+        run_cli_with_writer(opts, &mut output).unwrap();
+        let output = String::from_utf8(output).unwrap();
+        assert!(output.contains("precompute jobs: total=1 planned=1"));
+
         let manifest = std::fs::read_to_string(tmp.path().join("out/manifest.json")).unwrap();
         assert!(manifest.contains("\"status\": \"planned\""));
         let tmp_manifest_count = std::fs::read_dir(tmp.path().join("out"))
@@ -1289,5 +1621,41 @@ mod tests {
             })
             .count();
         assert_eq!(tmp_manifest_count, 0);
+    }
+
+    #[test]
+    fn run_cli_reports_precompute_progress() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config_path = tmp.path().join("config.json");
+        std::fs::write(tmp.path().join("oop.txt"), "AA").unwrap();
+        std::fs::write(tmp.path().join("ip.txt"), "KK").unwrap();
+        std::fs::write(
+            &config_path,
+            serde_json::to_string(&TrainingConfig {
+                version: 1,
+                profiles: vec![smoke_profile()],
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+        let opts = CliOptions {
+            config_path,
+            output_dir: tmp.path().join("out"),
+            profile: None,
+            seed: Some(7),
+            limit: Some(1),
+            overwrite: true,
+            dry_run: false,
+        };
+        let mut output = Vec::new();
+        run_cli_with_writer(opts, &mut output).unwrap();
+
+        let output = String::from_utf8(output).unwrap();
+        assert!(output.contains("precompute jobs: total=1 planned=1"));
+        assert!(output.contains("[0/1 0%] solving smoke_2bp_btn_vs_bb_100bb"));
+        assert!(output.contains("[1/1 100%] solved smoke_2bp_btn_vs_bb_100bb"));
+        assert!(output.contains("flop="));
+        assert!(output.contains(".bin"));
     }
 }
