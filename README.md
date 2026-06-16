@@ -87,13 +87,19 @@ Generated solver files are not committed. Write precomputed training libraries o
 pixi run training-precompute --config training-profiles/smoke.json --out ../training-games-dev --overwrite
 ```
 
+Use `training-profiles/dev-light.json` for a single real 6-max BTN-vs-BB range job with the lightweight `standard_dev` tree preset. This is intended for checking real range loading, memory estimates, save/load, and progress output before attempting the full 6-max set:
+
+```sh
+pixi run training-precompute --config training-profiles/dev-light.json --out ../training-games-dev --overwrite
+```
+
 For a quick profile/path validation without generating `.bin` files:
 
 ```sh
 pixi run training-precompute --config training-profiles/6max-heads-up.json --out /tmp/desktop-postflop-6max-dry-run --dry-run --limit 3 --overwrite
 ```
 
-The training library manifest is written to `<out>/manifest.json`, and solved jobs are stored as `<out>/<potType>/<profileId>/*.bin`. The Training page defaults to `../training-games-dev`; pass a different root in the page input if you generated data elsewhere.
+The precompute command prints per-job progress plus intra-job stages such as `build_tree`, `memory_estimate`, `allocate_memory`, `initial_exploitability`, and iteration starts/checkpoints. The training library manifest is written to `<out>/manifest.json`, and solved jobs are stored as `<out>/<potType>/<profileId>/*.bin`. The Training page defaults to `../training-games-dev`; pass a different root in the page input if you generated data elsewhere.
 
 ## Checks
 

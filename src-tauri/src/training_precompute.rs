@@ -691,7 +691,7 @@ pub fn tree_config_for_preset(
             "3x",
             "30%,80%,150%",
             "3x",
-            "30%,80%,150%",
+            Some("30%,80%,150%"),
         ),
         "standard_3bp" => (
             "30%,80%,150%",
@@ -700,7 +700,7 @@ pub fn tree_config_for_preset(
             "3x",
             "30%,80%,150%",
             "3x",
-            "30%,80%,150%",
+            Some("30%,80%,150%"),
         ),
         "standard_4bp" => (
             "30%,80%,150%",
@@ -709,8 +709,9 @@ pub fn tree_config_for_preset(
             "3x",
             "30%,80%,150%",
             "3x",
-            "30%,80%,150%",
+            Some("30%,80%,150%"),
         ),
+        "standard_dev" => ("50%", "3x", "50%", "3x", "50%", "3x", None),
         other => return Err(format!("unknown tree preset: {other}")),
     };
 
@@ -736,14 +737,14 @@ pub fn tree_config_for_preset(
         flop_bet_sizes: flop_sizes,
         turn_bet_sizes: turn_sizes,
         river_bet_sizes: river_sizes,
-        turn_donk_sizes: Some(
-            DonkSizeOptions::try_from(donk)
-                .map_err(|err| format!("invalid turn donk size for {preset}: {err}"))?,
-        ),
-        river_donk_sizes: Some(
-            DonkSizeOptions::try_from(donk)
-                .map_err(|err| format!("invalid river donk size for {preset}: {err}"))?,
-        ),
+        turn_donk_sizes: donk
+            .map(DonkSizeOptions::try_from)
+            .transpose()
+            .map_err(|err| format!("invalid turn donk size for {preset}: {err}"))?,
+        river_donk_sizes: donk
+            .map(DonkSizeOptions::try_from)
+            .transpose()
+            .map_err(|err| format!("invalid river donk size for {preset}: {err}"))?,
         add_allin_threshold: 1.5,
         force_allin_threshold: 0.15,
         merging_threshold: 0.1,
@@ -762,6 +763,18 @@ pub fn execute_job(
     job: &mut JobManifestEntry,
     overwrite: bool,
 ) -> Result<(), String> {
+    let mut progress = io::sink();
+    execute_job_with_progress(profile, ranges, flop, job, overwrite, &mut progress)
+}
+
+fn execute_job_with_progress<W: IoWrite>(
+    profile: &TrainingProfile,
+    ranges: &LoadedProfileRanges,
+    flop: [u8; 3],
+    job: &mut JobManifestEntry,
+    overwrite: bool,
+    progress: &mut W,
+) -> Result<(), String> {
     let start = Instant::now();
     let path = job
         .path
@@ -774,6 +787,7 @@ pub fn execute_job(
         return Ok(());
     }
 
+    write_stage_progress(progress, job, "parse_ranges", "")?;
     let oop_range = ranges
         .oop_range
         .parse()
@@ -790,6 +804,12 @@ pub fn execute_job(
         river: NOT_DEALT,
     };
 
+    write_stage_progress(
+        progress,
+        job,
+        "build_tree",
+        &format!("preset={}", profile.tree_preset),
+    )?;
     let tree_config = tree_config_for_preset(
         &profile.tree_preset,
         profile.starting_pot,
@@ -802,12 +822,35 @@ pub fn execute_job(
     let mut game = PostFlopGame::with_config(card_config, action_tree)
         .map_err(|err| format!("failed to build game for {}: {err}", profile.id))?;
 
+    let (uncompressed_memory, compressed_memory) = game.memory_usage();
+    let selected_memory = if profile.enable_compression {
+        compressed_memory
+    } else {
+        uncompressed_memory
+    };
+    write_stage_progress(
+        progress,
+        job,
+        "memory_estimate",
+        &format!(
+            "uncompressed={uncompressed_memory} compressed={compressed_memory} selected={selected_memory}"
+        ),
+    )?;
+    write_stage_progress(
+        progress,
+        job,
+        "allocate_memory",
+        &format!("compression={}", profile.enable_compression),
+    )?;
     game.allocate_memory(profile.enable_compression);
-    let solve_report = solve_with_report(
+    write_stage_progress(progress, job, "allocated_memory", "")?;
+    let solve_report = solve_with_report_with_progress(
         &mut game,
         profile.max_iterations,
         profile.target_exploitability,
-    );
+        progress,
+        Some(&*job),
+    )?;
 
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
@@ -822,9 +865,11 @@ pub fn execute_job(
         job.profile_fingerprint,
         ranges.range_fingerprint
     );
+    write_stage_progress(progress, job, "save", &format!("output={}", path.display()))?;
     save_data_to_file(&game, &memo, &path, None)
         .map_err(|err| format!("failed to save {}: {err}", path.display()))?;
 
+    write_stage_progress(progress, job, "verify_saved_file", "")?;
     let (loaded, _memo): (PostFlopGame, _) = load_data_from_file(&path, None)
         .map_err(|err| format!("failed to verify saved file {}: {err}", path.display()))?;
     if loaded.card_config().flop != flop {
@@ -845,6 +890,12 @@ pub fn execute_job(
     job.final_exploitability = Some(solve_report.final_exploitability);
     job.duration_ms = Some(start.elapsed().as_millis());
     job.error = None;
+    write_stage_progress(
+        progress,
+        job,
+        "job_complete",
+        &format!("duration_ms={}", job.duration_ms.unwrap_or_default()),
+    )?;
     Ok(())
 }
 
@@ -853,33 +904,94 @@ struct SolveReport {
     final_exploitability: f32,
 }
 
-fn solve_with_report(
+fn solve_with_report_with_progress<W: IoWrite>(
     game: &mut PostFlopGame,
     max_iterations: u32,
     target_exploitability: f32,
-) -> SolveReport {
+    progress: &mut W,
+    job: Option<&JobManifestEntry>,
+) -> Result<SolveReport, String> {
     let mut exploitability = compute_exploitability(&*game);
+    write_solve_progress(
+        progress,
+        job,
+        &format!("stage=initial_exploitability value={exploitability}"),
+    )?;
     let mut iterations_completed = 0;
 
     for iteration in 0..max_iterations {
         if exploitability <= target_exploitability {
+            write_solve_progress(
+                progress,
+                job,
+                &format!(
+                    "stage=target_reached iterations={iterations_completed} exploitability={exploitability}"
+                ),
+            )?;
             break;
         }
 
+        write_solve_progress(
+            progress,
+            job,
+            &format!("iteration={}/{} stage=start", iteration + 1, max_iterations),
+        )?;
         solve_step(&*game, iteration);
         iterations_completed += 1;
 
         if iterations_completed % 10 == 0 || iterations_completed == max_iterations {
             exploitability = compute_exploitability(&*game);
+            write_solve_progress(
+                progress,
+                job,
+                &format!(
+                    "iteration={iterations_completed}/{max_iterations} stage=checkpoint exploitability={exploitability}"
+                ),
+            )?;
         }
     }
 
+    write_solve_progress(progress, job, "stage=finalize")?;
     finalize(game);
 
-    SolveReport {
+    Ok(SolveReport {
         iterations_completed,
         final_exploitability: exploitability,
+    })
+}
+
+fn write_stage_progress<W: IoWrite>(
+    progress: &mut W,
+    job: &JobManifestEntry,
+    stage: &str,
+    detail: &str,
+) -> Result<(), String> {
+    let message = if detail.is_empty() {
+        format!("stage={stage}")
+    } else {
+        format!("stage={stage} {detail}")
+    };
+    write_solve_progress(progress, Some(job), &message)
+}
+
+fn write_solve_progress<W: IoWrite>(
+    progress: &mut W,
+    job: Option<&JobManifestEntry>,
+    message: &str,
+) -> Result<(), String> {
+    match job {
+        Some(job) => writeln!(
+            progress,
+            "  job={} flop={} {}",
+            job.profile_id, job.flop, message
+        ),
+        None => writeln!(progress, "{message}"),
     }
+    .map_err(|err| format!("failed to write progress: {err}"))?;
+
+    progress
+        .flush()
+        .map_err(|err| format!("failed to flush progress: {err}"))
 }
 
 pub fn run_cli(opts: CliOptions) -> Result<(), String> {
@@ -1003,7 +1115,14 @@ fn run_cli_with_writer<W: IoWrite>(opts: CliOptions, progress: &mut W) -> Result
 
             let result = {
                 let job = &mut manifest.jobs[index];
-                execute_job(profile, &ranges, flop, job, run_options.overwrite)
+                execute_job_with_progress(
+                    profile,
+                    &ranges,
+                    flop,
+                    job,
+                    run_options.overwrite,
+                    progress,
+                )
             };
             if let Err(err) = result {
                 manifest.jobs[index].status = JobStatus::Failed;
@@ -1054,7 +1173,10 @@ fn write_plan_progress<W: IoWrite>(
         missing_range,
         dry_run
     )
-    .map_err(|err| format!("failed to write progress: {err}"))
+    .map_err(|err| format!("failed to write progress: {err}"))?;
+    progress
+        .flush()
+        .map_err(|err| format!("failed to flush progress: {err}"))
 }
 
 fn write_job_progress<W: IoWrite>(
@@ -1086,7 +1208,10 @@ fn write_job_progress<W: IoWrite>(
             .map(|value| value.to_string())
             .unwrap_or_else(|| "n/a".to_string())
     )
-    .map_err(|err| format!("failed to write progress: {err}"))
+    .map_err(|err| format!("failed to write progress: {err}"))?;
+    progress
+        .flush()
+        .map_err(|err| format!("failed to flush progress: {err}"))
 }
 
 fn job_status_label(status: JobStatus) -> &'static str {
@@ -1247,6 +1372,17 @@ mod tests {
             max_iterations: 1,
             enable_compression: false,
             ..runnable_profile("smoke_2bp_btn_vs_bb_100bb")
+        }
+    }
+
+    fn dev_iteration_profile() -> TrainingProfile {
+        TrainingProfile {
+            tree_preset: "standard_dev".to_string(),
+            flop_count: 1,
+            target_exploitability: -1.0,
+            max_iterations: 1,
+            enable_compression: false,
+            ..runnable_profile("dev_2bp_btn_vs_bb_100bb")
         }
     }
 
@@ -1492,6 +1628,25 @@ mod tests {
         assert!(tree_config_for_preset("standard_srp", 550, 10000, 0.0, 0.0).is_ok());
         assert!(tree_config_for_preset("standard_3bp", 2100, 10000, 0.0, 0.0).is_ok());
         assert!(tree_config_for_preset("standard_4bp", 4500, 10000, 0.0, 0.0).is_ok());
+        assert!(tree_config_for_preset("standard_dev", 550, 10000, 0.0, 0.0).is_ok());
+    }
+
+    #[test]
+    fn standard_dev_tree_is_lightweight() {
+        use postflop_solver::BetSize::{PotRelative, PrevBetRelative};
+
+        let tree = tree_config_for_preset("standard_dev", 550, 10000, 0.0, 0.0).unwrap();
+        for options in tree
+            .flop_bet_sizes
+            .iter()
+            .chain(tree.turn_bet_sizes.iter())
+            .chain(tree.river_bet_sizes.iter())
+        {
+            assert_eq!(options.bet, vec![PotRelative(0.5)]);
+            assert_eq!(options.raise, vec![PrevBetRelative(3.0)]);
+        }
+        assert!(tree.turn_donk_sizes.is_none());
+        assert!(tree.river_donk_sizes.is_none());
     }
 
     #[test]
@@ -1657,5 +1812,59 @@ mod tests {
         assert!(output.contains("[1/1 100%] solved smoke_2bp_btn_vs_bb_100bb"));
         assert!(output.contains("flop="));
         assert!(output.contains(".bin"));
+    }
+
+    #[test]
+    fn run_cli_reports_intra_job_progress() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config_path = tmp.path().join("config.json");
+        std::fs::write(tmp.path().join("oop.txt"), "AA").unwrap();
+        std::fs::write(tmp.path().join("ip.txt"), "KK").unwrap();
+        std::fs::write(
+            &config_path,
+            serde_json::to_string(&TrainingConfig {
+                version: 1,
+                profiles: vec![dev_iteration_profile()],
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+        let opts = CliOptions {
+            config_path,
+            output_dir: tmp.path().join("out"),
+            profile: None,
+            seed: Some(7),
+            limit: Some(1),
+            overwrite: true,
+            dry_run: false,
+        };
+        let mut output = Vec::new();
+        run_cli_with_writer(opts, &mut output).unwrap();
+
+        let output = String::from_utf8(output).unwrap();
+        assert!(output.contains("stage=parse_ranges"));
+        assert!(output.contains("stage=build_tree preset=standard_dev"));
+        assert!(output.contains("stage=memory_estimate"));
+        assert!(output.contains("stage=allocate_memory compression=false"));
+        assert!(output.contains("stage=initial_exploitability value="));
+        assert!(output.contains("iteration=1/1 stage=start"));
+        assert!(output.contains("stage=save output="));
+    }
+
+    #[test]
+    fn dev_light_profile_uses_light_tree_and_single_flop() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let raw =
+            std::fs::read_to_string(repo_root.join("training-profiles/dev-light.json")).unwrap();
+        let config: TrainingConfig = serde_json::from_str(&raw).unwrap();
+        validate_config(&config).unwrap();
+
+        assert_eq!(config.profiles.len(), 1);
+        let profile = &config.profiles[0];
+        assert_eq!(profile.tree_preset, "standard_dev");
+        assert_eq!(profile.flop_count, 1);
+        assert!(profile.max_iterations <= 10);
+        assert_eq!(profile.target_exploitability, 10_000.0);
     }
 }

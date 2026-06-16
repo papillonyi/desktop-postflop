@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "id": "dev_2bp_btn_vs_bb_100bb",
+      "enabled": true,
+      "weight": 1,
+      "spot": "Dev light BTN 2.5bb open vs BB call",
+      "potType": "2bp",
+      "oopPosition": "BB",
+      "ipPosition": "BTN",
+      "startingPot": 550,
+      "effectiveStack": 10000,
+      "rakeRate": 0.0,
+      "rakeCap": 0.0,
+      "oopRangePath": "../training-ranges/6max/BTN/2.5bb/BB/Call/BB_range.txt",
+      "ipRangePath": "../training-ranges/6max/BTN/2.5bb/BB/Call/BTN_range.txt",
+      "treePreset": "standard_dev",
+      "flopCount": 1,
+      "seed": 9001,
+      "targetExploitability": 10000.0,
+      "maxIterations": 1,
+      "enableCompression": true
+    }
+  ]
+}
