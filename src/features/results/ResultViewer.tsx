@@ -44,7 +44,6 @@ import {
   colorString,
   ranks,
   toFixed1,
-  toFixed2,
   toFixedAdaptive,
 } from "../../utils";
 
@@ -238,6 +237,48 @@ function ResultMetricCard({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ResultActionCard({
+  action,
+  ev,
+  frequency,
+}: {
+  action: SpotPlayer["actions"][number];
+  ev: number;
+  frequency: number;
+}) {
+  return (
+    <div
+      className="rounded border border-gray-200 bg-gray-50 px-2 py-1.5"
+      style={{
+        borderLeftColor: action.color,
+        borderLeftWidth: 4,
+      }}
+    >
+      <div className="truncate text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+        {actionShortLabel(action)}
+      </div>
+      <div className="mt-1 grid grid-cols-2 gap-2">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+            Freq
+          </div>
+          <div className="truncate text-right text-sm font-semibold text-gray-900">
+            {formatPercent(frequency)}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+            EV
+          </div>
+          <div className="truncate text-right text-sm font-semibold text-gray-900">
+            {formatEv(ev)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ResultTable({
   cards,
   displayPlayer,
@@ -381,21 +422,12 @@ function ResultTable({
             {numActions > 0 && (
               <div className="mt-2 grid grid-cols-2 gap-2">
                 {actions.slice(0, numActions).map((action, index) => (
-                  <div
-                    className="rounded border border-gray-200 bg-white px-2 py-1.5 text-sm"
+                  <ResultActionCard
+                    action={action}
+                    ev={summary[6 + index * 2 + 1]}
+                    frequency={summary[6 + index * 2]}
                     key={`${action.name}-${action.amount}-${index}`}
-                    style={{
-                      borderLeftColor: action.color,
-                      borderLeftWidth: 4,
-                    }}
-                  >
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                      {actionShortLabel(action)}
-                    </div>
-                    <div className="mt-0.5 text-right font-semibold">
-                      {formatPercent(summary[6 + index * 2])}
-                    </div>
-                  </div>
+                  />
                 ))}
               </div>
             )}
@@ -474,26 +506,12 @@ function ResultTable({
                   {numActions > 0 && (
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       {actions.slice(0, numActions).map((action, index) => (
-                        <div
-                          className="rounded border border-gray-200 bg-gray-50 px-2 py-1.5"
+                        <ResultActionCard
+                          action={action}
+                          ev={row[6 + index * 2 + 1]}
+                          frequency={row[6 + index * 2]}
                           key={`${action.name}-${action.amount}-${index}`}
-                          style={{
-                            borderLeftColor: action.color,
-                            borderLeftWidth: 4,
-                          }}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                              {actionShortLabel(action)}
-                            </span>
-                            <span className="text-sm font-semibold">
-                              {formatPercent(row[6 + index * 2])}
-                            </span>
-                          </div>
-                          <div className="mt-0.5 text-right text-xs text-gray-500">
-                            EV {toFixed2(row[6 + index * 2 + 1])}
-                          </div>
-                        </div>
+                        />
                       ))}
                     </div>
                   )}
