@@ -20,6 +20,7 @@ import type {
   Results,
   Spot,
   SpotChance,
+  SpotPlayer,
 } from "../../result-types";
 import {
   barHeightList,
@@ -174,6 +175,18 @@ function pairText(pair: number) {
   return [cardText(card1)];
 }
 
+function pairCards(pair: number) {
+  const card1 = pair & 0xff;
+  const card2 = pair >>> 8;
+  return card2 !== 0xff ? [card2, card1] : [card1];
+}
+
+function actionShortLabel(action: SpotPlayer["actions"][number]) {
+  return action.amount === "0"
+    ? action.name
+    : `${action.name[0]} ${action.amount}`;
+}
+
 function downloadText(filename: string, text: string) {
   const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -209,6 +222,19 @@ function MiniBar({ values }: { values: number[] }) {
         background: `linear-gradient(to right, ${sky500} ${sep}, ${lime500} ${sep})`,
       }}
     />
+  );
+}
+
+function ResultMetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded border border-gray-200 bg-gray-50 px-2 py-1.5">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+        {label}
+      </div>
+      <div className="mt-0.5 truncate text-right text-sm font-semibold text-gray-900">
+        {value}
+      </div>
+    </div>
   );
 }
 
@@ -291,16 +317,8 @@ function ResultTable({
       ...actions
         .slice(0, numActions)
         .flatMap((action) => [
-          `${
-            action.amount === "0"
-              ? action.name
-              : `${action.name[0]} ${action.amount}`
-          } %`,
-          `${
-            action.amount === "0"
-              ? action.name
-              : `${action.name[0]} ${action.amount}`
-          } EV`,
+          `${actionShortLabel(action)} %`,
+          `${actionShortLabel(action)} EV`,
         ]),
     ];
     const lines = [
@@ -342,117 +360,148 @@ function ResultTable({
           Export CSV
         </button>
       </div>
-      <div className="overflow-auto">
-        <table className="w-full border-collapse text-sm">
-          <thead className="sticky top-0 bg-gray-100">
-            <tr>
-              <th className="border-b border-gray-300 px-2 py-1 text-left">
-                Hand
-              </th>
-              <th className="border-b border-gray-300 px-2 py-1 text-right">
-                Weight
-              </th>
-              <th className="border-b border-gray-300 px-2 py-1 text-right">
-                EQ
-              </th>
-              <th className="border-b border-gray-300 px-2 py-1 text-right">
-                EV
-              </th>
-              <th className="border-b border-gray-300 px-2 py-1 text-right">
-                EQR
-              </th>
-              {actions.slice(0, numActions).map((action, index) => (
-                <th
-                  className="border-b border-gray-300 px-2 py-1 text-right"
-                  key={`${action.name}-${action.amount}-${index}`}
-                >
-                  {action.amount === "0"
-                    ? action.name
-                    : `${action.name[0]} ${action.amount}`}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {summary && (
-              <tr className="bg-yellow-50 font-semibold">
-                <td className="border-b border-gray-200 px-2 py-1">Summary</td>
-                <td className="border-b border-gray-200 px-2 py-1 text-right">
-                  {toFixed1(summary[1] * 100)}%
-                </td>
-                <td className="border-b border-gray-200 px-2 py-1 text-right">
-                  {toFixed1(summary[3] * 100)}%
-                </td>
-                <td className="border-b border-gray-200 px-2 py-1 text-right">
-                  {toFixedAdaptive(summary[4])}
-                </td>
-                <td className="border-b border-gray-200 px-2 py-1 text-right">
-                  {toFixed1(summary[5] * 100)}%
-                </td>
-                {actions.slice(0, numActions).map((_, index) => (
-                  <td
-                    className="border-b border-gray-200 px-2 py-1 text-right"
-                    key={index}
+      <div className="min-h-0 flex-1 overflow-auto bg-gray-50 p-3">
+        {summary && (
+          <div className="mb-3 rounded border border-yellow-200 bg-yellow-50 p-3 text-sm">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="font-semibold text-gray-900">Summary</div>
+              <div className="text-xs font-semibold uppercase text-gray-500">
+                {rows.length} hands
+              </div>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              <ResultMetricCard
+                label="Weight"
+                value={formatPercent(summary[1])}
+              />
+              <ResultMetricCard label="EQ" value={formatPercent(summary[3])} />
+              <ResultMetricCard label="EV" value={formatEv(summary[4])} />
+              <ResultMetricCard label="EQR" value={formatPercent(summary[5])} />
+            </div>
+            {numActions > 0 && (
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {actions.slice(0, numActions).map((action, index) => (
+                  <div
+                    className="rounded border border-gray-200 bg-white px-2 py-1.5 text-sm"
+                    key={`${action.name}-${action.amount}-${index}`}
+                    style={{
+                      borderLeftColor: action.color,
+                      borderLeftWidth: 4,
+                    }}
                   >
-                    {toFixed1(summary[6 + index * 2] * 100)}%
-                  </td>
-                ))}
-              </tr>
-            )}
-            {rows.map((row) => {
-              const cards = pairText(row[0]);
-              return (
-                <tr className="hover:bg-blue-50" key={row[0]}>
-                  <td className="border-b border-gray-100 px-2 py-1">
-                    {cards.map((card) => (
-                      <span
-                        className={card.colorClass}
-                        key={card.rank + card.suit}
-                      >
-                        {card.rank}
-                        {card.suit}
-                      </span>
-                    ))}
-                  </td>
-                  <td className="border-b border-gray-100 px-2 py-1 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <span
-                        className="inline-block h-2 bg-yellow-500"
-                        style={{
-                          width:
-                            maxWeight > 0
-                              ? `${(row[1] / maxWeight) * 3}rem`
-                              : 0,
-                        }}
-                      />
-                      {toFixed1(row[1] * 100)}%
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                      {actionShortLabel(action)}
                     </div>
-                  </td>
-                  <td className="border-b border-gray-100 px-2 py-1 text-right">
-                    {toFixed1(row[3] * 100)}%
-                  </td>
-                  <td className="border-b border-gray-100 px-2 py-1 text-right">
-                    {toFixedAdaptive(row[4])}
-                  </td>
-                  <td className="border-b border-gray-100 px-2 py-1 text-right">
-                    {toFixed1(row[5] * 100)}%
-                  </td>
-                  {actions.slice(0, numActions).map((_, index) => (
-                    <td
-                      className="border-b border-gray-100 px-2 py-1 text-right"
-                      key={index}
-                    >
-                      <div>{toFixed1(row[6 + index * 2] * 100)}%</div>
-                      <div className="text-xs text-gray-500">
-                        {toFixed2(row[6 + index * 2 + 1])}
+                    <div className="mt-0.5 text-right font-semibold">
+                      {formatPercent(summary[6 + index * 2])}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {rows.length === 0 ? (
+          <div className="flex h-full items-center justify-center text-sm font-semibold text-gray-500">
+            No matching hands
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3">
+            {rows.map((row) => {
+              const handCards = pairCards(row[0]);
+              const handLabel = pairText(row[0])
+                .map((card) => `${card.rank}${card.suitLetter}`)
+                .join("");
+              return (
+                <div
+                  className="rounded border border-gray-200 bg-white p-3 shadow-sm"
+                  key={row[0]}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <div className="flex shrink-0 gap-1.5">
+                        {handCards.map((card) => (
+                          <BoardCard
+                            aria-label={
+                              cardText(card).rank + cardText(card).suitLetter
+                            }
+                            cardId={card}
+                            className="rounded-md"
+                            disabled
+                            fontSize="0.72rem"
+                            key={card}
+                            width="34px"
+                          />
+                        ))}
                       </div>
-                    </td>
-                  ))}
-                </tr>
+                      <div className="min-w-0">
+                        <div className="truncate text-base font-semibold text-gray-900">
+                          {handLabel}
+                        </div>
+                        <div className="text-xs font-semibold uppercase text-gray-500">
+                          {displayPlayer.toUpperCase()}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex w-24 shrink-0 items-center gap-2 pt-1">
+                      <div className="h-2 flex-1 overflow-hidden rounded bg-gray-200">
+                        <div
+                          className="h-full rounded bg-yellow-500"
+                          style={{
+                            width:
+                              maxWeight > 0
+                                ? `${(row[1] / maxWeight) * 100}%`
+                                : 0,
+                          }}
+                        />
+                      </div>
+                      <div className="w-10 text-right text-xs font-semibold">
+                        {formatPercent(row[1])}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    <ResultMetricCard
+                      label="EQ"
+                      value={formatPercent(row[3])}
+                    />
+                    <ResultMetricCard label="EV" value={formatEv(row[4])} />
+                    <ResultMetricCard
+                      label="EQR"
+                      value={formatPercent(row[5])}
+                    />
+                  </div>
+                  {numActions > 0 && (
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      {actions.slice(0, numActions).map((action, index) => (
+                        <div
+                          className="rounded border border-gray-200 bg-gray-50 px-2 py-1.5"
+                          key={`${action.name}-${action.amount}-${index}`}
+                          style={{
+                            borderLeftColor: action.color,
+                            borderLeftWidth: 4,
+                          }}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                              {actionShortLabel(action)}
+                            </span>
+                            <span className="text-sm font-semibold">
+                              {formatPercent(row[6 + index * 2])}
+                            </span>
+                          </div>
+                          <div className="mt-0.5 text-right text-xs text-gray-500">
+                            EV {toFixed2(row[6 + index * 2 + 1])}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               );
             })}
-          </tbody>
-        </table>
+          </div>
+        )}
       </div>
     </div>
   );
