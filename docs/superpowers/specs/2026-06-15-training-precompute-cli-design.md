@@ -26,7 +26,7 @@ Add a second Rust binary in the existing `desktop-postflop` crate:
 src-tauri/src/bin/training_precompute.rs
 ```
 
-The CLI uses the same sibling solver crate as the web server:
+The CLI uses the same in-repo solver crate as the web server:
 
 ```text
 desktop-postflop CLI

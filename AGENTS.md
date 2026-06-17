@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-Desktop Postflop is a single-user web-server app with a React/TypeScript frontend and Rust Axum backend. Frontend code lives in `src/`: React features are grouped under `src/features/`, shared state is in `src/store.ts`, database/migration logic is in `src/db*.ts`, and static assets are in `src/assets/` and `public/`. The Rust HTTP API lives in `src-tauri/src/web/`, with the server entry at `src-tauri/src/bin/web_server.rs`. The solver engine is an external sibling checkout at `../postflop-solver`, referenced from `src-tauri/Cargo.toml`.
+Desktop Postflop is a single-user web-server app with a React/TypeScript frontend and Rust Axum backend. Frontend code lives in `src/`: React features are grouped under `src/features/`, shared state is in `src/store.ts`, database/migration logic is in `src/db*.ts`, and static assets are in `src/assets/` and `public/`. The Rust HTTP API lives in `src-tauri/src/web/`, with the server entry at `src-tauri/src/bin/web_server.rs`. The solver engine lives in the in-repo Rust crate `postflop-solver/`, referenced from `src-tauri/Cargo.toml`.
 
 ## Build, Test, and Development Commands
 
@@ -15,7 +15,7 @@ Desktop Postflop is a single-user web-server app with a React/TypeScript fronten
 - `pixi run server-start`: run the release web-server binary.
 - `pixi run lint` / `pixi run format`: run ESLint or Prettier on frontend files.
 - `pixi run server-check` / `pixi run cargo-check`: check the Rust web-server crate.
-- `pixi run solver-test`: run tests in the sibling `../postflop-solver` crate.
+- `pixi run solver-test`: run tests in the in-repo `postflop-solver` crate.
 
 ## Coding Style & Naming Conventions
 
@@ -23,7 +23,7 @@ Use TypeScript, React components, Redux Toolkit state, React Router, and Tailwin
 
 ## Testing Guidelines
 
-There is no frontend test runner configured, so use `pixi run lint` and `pixi run frontend-build` as the minimum frontend verification. Add Rust unit tests near implementation code or integration tests under `../postflop-solver/tests/`, following existing examples like `kuhn.rs` and `leduc.rs`. Keep solver tests deterministic and small enough for local runs.
+There is no frontend test runner configured, so use `pixi run lint` and `pixi run frontend-build` as the minimum frontend verification. Add Rust unit tests near implementation code or integration tests under `postflop-solver/tests/`, following existing examples like `kuhn.rs` and `leduc.rs`. Keep solver tests deterministic and small enough for local runs.
 
 ## Commit & Pull Request Guidelines
 
@@ -31,4 +31,4 @@ Recent commits use short, lower-case imperative messages such as `add load metho
 
 ## Security & Configuration Tips
 
-Do not commit generated outputs such as `dist/`, `node_modules/`, `src-tauri/target/`, or local solver save files. Keep solver source changes in the sibling `../postflop-solver` repository. Build performance can depend on Rust toolchain and CPU features; see `README.md` before changing `src-tauri/.cargo/config.toml` or solver dependency features.
+Do not commit generated outputs such as `dist/`, `node_modules/`, `src-tauri/target/`, `postflop-solver/target/`, or local solver save files. Build performance can depend on Rust toolchain and CPU features; see `README.md` before changing `src-tauri/.cargo/config.toml` or solver dependency features.

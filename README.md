@@ -11,14 +11,13 @@ The app is now split into:
 
 - React/TypeScript frontend in `src/`, built by Vite into `dist/`.
 - Rust Axum web server in `src-tauri/src/bin/web_server.rs` and `src-tauri/src/web/`.
-- Solver engine from the sibling checkout `../postflop-solver`.
+- Solver engine in the in-repo Rust crate `postflop-solver/`.
 
 The server owns all solver state in memory and exposes it through `/api/*`. The React app is served from the same Rust process in production-style runs, so the browser talks to the local server at `http://127.0.0.1:3000`.
 
 ## Requirements
 
 - Pixi
-- The sibling solver checkout at `../postflop-solver`
 - macOS Apple silicon or Linux x86_64 for the checked-in Pixi platforms (`osx-arm64`, `linux-64`)
 
 Install the local Node/Rust environment and npm dependencies:
@@ -125,7 +124,7 @@ pixi run frontend-build
 pixi run server-check
 ```
 
-Optional solver tests live in the sibling solver crate:
+Optional solver tests live in the in-repo solver crate:
 
 ```sh
 pixi run solver-test
