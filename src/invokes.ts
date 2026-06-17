@@ -587,3 +587,56 @@ export const trainingSessionStart = async (req: {
 }): Promise<TrainingSession> => {
   return await apiPost<TrainingSession>("/training/session/start", req);
 };
+
+export const trainingSessionReplay = async (req: {
+  root?: string;
+  heroPosition: TrainingPosition;
+  path: string;
+}): Promise<TrainingSession> => {
+  return await apiPost<TrainingSession>("/training/session/replay", req);
+};
+
+/* Preflop Training */
+
+export type PreflopPosition = "UTG" | "MP" | "CO" | "BTN" | "SB" | "BB";
+
+export type PreflopSummary = {
+  root: string;
+  rangeFileCount: number;
+  decisionNodeCount: number;
+  heroDecisionCounts: Record<string, number>;
+};
+
+export type PreflopActionHistoryItem = {
+  actor: PreflopPosition;
+  action: string;
+  range: string | null;
+  rangeSource: "direct" | "derived" | "missing";
+};
+
+export type PreflopActionFrequency = {
+  action: string;
+  frequency: number;
+  inferred: boolean;
+};
+
+export type PreflopDecision = {
+  root: string;
+  heroPosition: PreflopPosition;
+  nodePath: string;
+  handClass: string;
+  handCards: number[];
+  history: PreflopActionHistoryItem[];
+  actions: PreflopActionFrequency[];
+  notes: string[];
+};
+
+export const preflopSummary = async (): Promise<PreflopSummary> => {
+  return await apiGet<PreflopSummary>("/preflop/summary");
+};
+
+export const preflopDecisionStart = async (req: {
+  heroPosition: PreflopPosition;
+}): Promise<PreflopDecision> => {
+  return await apiPost<PreflopDecision>("/preflop/decision/start", req);
+};

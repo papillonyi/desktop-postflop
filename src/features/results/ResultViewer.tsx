@@ -64,6 +64,7 @@ type LoadedResults = {
   cards: number[][];
   chanceReports: ChanceReports | null;
   currentBoard: number[];
+  currentHistory: number[];
   results: Results;
   selectedChance: SpotChance | null;
   selectedSpot: Spot | null;
@@ -1290,6 +1291,7 @@ export function ResultViewer() {
             cards,
             chanceReports: null,
             currentBoard: [],
+            currentHistory: [],
             results,
             selectedChance: null,
             selectedSpot: null,

@@ -8,7 +8,7 @@ use axum::{
 };
 use postflop_solver::{load_data_from_file, PostFlopGame, NOT_DEALT};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -29,6 +29,14 @@ pub struct SessionStartRequest {
     pub hero_position: String,
     pub pot_types: Option<Vec<String>>,
     pub profile_ids: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionReplayRequest {
+    pub root: Option<String>,
+    pub hero_position: String,
+    pub path: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -166,6 +174,13 @@ pub async fn session_start(
     start_session_from_request(state, req).map(Json)
 }
 
+pub async fn session_replay(
+    State(state): State<Arc<SharedAppState>>,
+    Json(req): Json<SessionReplayRequest>,
+) -> Result<Json<SessionStartResponse>, TrainingApiError> {
+    replay_session_from_request(state, req).map(Json)
+}
+
 fn library_summary_for_root(
     root: Option<&str>,
 ) -> Result<LibrarySummaryResponse, TrainingApiError> {
@@ -234,6 +249,51 @@ fn start_session_from_request(
         "no loadable training jobs match the requested filters",
         start_errors,
     ))
+}
+
+fn replay_session_from_request(
+    state: Arc<SharedAppState>,
+    req: SessionReplayRequest,
+) -> Result<SessionStartResponse, TrainingApiError> {
+    validate_position(&req.hero_position)?;
+    if req.path.trim().is_empty() {
+        return Err(TrainingApiError::new(
+            StatusCode::BAD_REQUEST,
+            "path is required to replay a training session",
+        ));
+    }
+
+    let library = load_training_library(req.root.as_deref())?;
+    let (solved_jobs, validation_errors) = collect_solved_jobs(&library);
+    let selected =
+        find_solved_job_by_path(&solved_jobs, &library.root, &req.path).ok_or_else(|| {
+            TrainingApiError::with_validation(
+                StatusCode::NOT_FOUND,
+                "no solved training job matches the replay path",
+                validation_errors,
+            )
+        })?;
+
+    if selected.job.oop_position != req.hero_position
+        && selected.job.ip_position != req.hero_position
+    {
+        return Err(TrainingApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!(
+                "heroPosition {} is not part of selected replay spot",
+                req.hero_position
+            ),
+        ));
+    }
+
+    let start_req = SessionStartRequest {
+        root: req.root,
+        hero_position: req.hero_position,
+        pot_types: None,
+        profile_ids: None,
+    };
+    let mut rng = Lcg::new(random_seed());
+    build_session_from_job(state, &library.root, &start_req, &selected, &mut rng)
 }
 
 fn build_session_from_job(
@@ -370,22 +430,69 @@ fn memo_has_key_value(memo: &str, key: &str, value: &str) -> bool {
 fn load_training_library(root: Option<&str>) -> Result<TrainingLibrary, TrainingApiError> {
     let root = resolve_root(root)?;
     let manifest_path = root.join("manifest.json");
-    let raw = std::fs::read_to_string(&manifest_path).map_err(|err| {
+    let mut manifest = read_manifest_file(&manifest_path)?;
+    for backup_path in manifest_backup_paths(&root, &manifest_path)? {
+        let backup = read_manifest_file(&backup_path)?;
+        manifest.jobs.extend(backup.jobs);
+    }
+    Ok(TrainingLibrary { root, manifest })
+}
+
+fn read_manifest_file(path: &Path) -> Result<Manifest, TrainingApiError> {
+    let raw = std::fs::read_to_string(path).map_err(|err| {
         TrainingApiError::new(
             StatusCode::NOT_FOUND,
-            format!("failed to read manifest {}: {err}", manifest_path.display()),
+            format!("failed to read manifest {}: {err}", path.display()),
         )
     })?;
-    let manifest = serde_json::from_str::<Manifest>(&raw).map_err(|err| {
+    serde_json::from_str::<Manifest>(&raw).map_err(|err| {
         TrainingApiError::new(
             StatusCode::BAD_REQUEST,
-            format!(
-                "failed to parse manifest {}: {err}",
-                manifest_path.display()
-            ),
+            format!("failed to parse manifest {}: {err}", path.display()),
+        )
+    })
+}
+
+fn manifest_backup_paths(
+    root: &Path,
+    primary_manifest: &Path,
+) -> Result<Vec<PathBuf>, TrainingApiError> {
+    let entries = std::fs::read_dir(root).map_err(|err| {
+        TrainingApiError::new(
+            StatusCode::NOT_FOUND,
+            format!("failed to read training root {}: {err}", root.display()),
         )
     })?;
-    Ok(TrainingLibrary { root, manifest })
+    let mut paths = Vec::new();
+
+    for entry in entries {
+        let entry = entry.map_err(|err| {
+            TrainingApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!(
+                    "failed to read training root entry in {}: {err}",
+                    root.display()
+                ),
+            )
+        })?;
+        let path = entry.path();
+        if path == primary_manifest || !is_manifest_backup_path(&path) {
+            continue;
+        }
+        paths.push(path);
+    }
+
+    paths.sort();
+    Ok(paths)
+}
+
+fn is_manifest_backup_path(path: &Path) -> bool {
+    let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    file_name.starts_with("manifest")
+        && file_name.ends_with(".json")
+        && !file_name.contains(".tmp.")
 }
 
 fn resolve_root(root: Option<&str>) -> Result<PathBuf, TrainingApiError> {
@@ -439,18 +546,21 @@ fn collect_solved_jobs(
 ) -> (Vec<ResolvedJob<'_>>, Vec<TrainingValidationError>) {
     let mut solved = Vec::new();
     let mut errors = Vec::new();
+    let mut seen_paths = BTreeSet::new();
 
     for job in &library.manifest.jobs {
-        if job.status != JobStatus::Solved {
+        if !is_loadable_job_status(job.status) {
             continue;
         }
 
         if job.path.is_none() && job.output_relative_path.is_none() {
-            errors.push(TrainingValidationError {
-                profile_id: Some(job.profile_id.clone()),
-                path: None,
-                message: "solved job is missing a file path".to_string(),
-            });
+            if reports_missing_loadable_file(job.status) {
+                errors.push(TrainingValidationError {
+                    profile_id: Some(job.profile_id.clone()),
+                    path: None,
+                    message: "solved job is missing a file path".to_string(),
+                });
+            }
             continue;
         }
 
@@ -461,11 +571,14 @@ fn collect_solved_jobs(
             job.path.as_deref(),
         );
         if resolved_path.exists() {
+            if !seen_paths.insert(resolved_path.clone()) {
+                continue;
+            }
             solved.push(ResolvedJob {
                 job,
                 path: resolved_path,
             });
-        } else {
+        } else if reports_missing_loadable_file(job.status) {
             errors.push(TrainingValidationError {
                 profile_id: Some(job.profile_id.clone()),
                 path: Some(display_path(&resolved_path)),
@@ -475,6 +588,17 @@ fn collect_solved_jobs(
     }
 
     (solved, errors)
+}
+
+fn is_loadable_job_status(status: JobStatus) -> bool {
+    matches!(
+        status,
+        JobStatus::Solved | JobStatus::SkippedExisting | JobStatus::Planned
+    )
+}
+
+fn reports_missing_loadable_file(status: JobStatus) -> bool {
+    matches!(status, JobStatus::Solved | JobStatus::SkippedExisting)
 }
 
 fn resolve_job_path(
@@ -559,6 +683,38 @@ fn filter_session_jobs<'a>(
         })
         .cloned()
         .collect()
+}
+
+fn find_solved_job_by_path<'a>(
+    jobs: &'a [ResolvedJob<'a>],
+    root: &Path,
+    requested: &str,
+) -> Option<ResolvedJob<'a>> {
+    let requested = requested.trim();
+    let raw_path = PathBuf::from(requested);
+    let mut candidates = vec![raw_path.clone()];
+    if raw_path.is_relative() && is_safe_relative_path(&raw_path) {
+        candidates.push(root.join(&raw_path));
+    }
+
+    jobs.iter()
+        .find(|resolved| {
+            display_path(&resolved.path) == requested
+                || candidates
+                    .iter()
+                    .any(|candidate| paths_refer_to_same_file(&resolved.path, candidate))
+        })
+        .cloned()
+}
+
+fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
+    if left == right {
+        return true;
+    }
+    match (left.canonicalize(), right.canonicalize()) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
 }
 
 fn choose_session_job_index(jobs: &[ResolvedJob<'_>], rng: &mut Lcg) -> usize {
@@ -885,15 +1041,15 @@ mod tests {
         solved.output_relative_path = Some("p1.bin".into());
         solved.path = Some(existing_path.clone());
         solved.status = JobStatus::Solved;
-        let mut planned =
+        let mut failed =
             JobManifestEntry::planned(&profile, &stack, Some(&ranges), [1, 5, 9], root);
-        planned.status = JobStatus::Planned;
+        failed.status = JobStatus::Failed;
         let mut missing =
             JobManifestEntry::planned(&profile, &stack, Some(&ranges), [2, 6, 10], root);
         missing.output_relative_path = Some("missing.bin".into());
         missing.path = Some(root.join("missing.bin"));
         missing.status = JobStatus::Solved;
-        let manifest = manifest_with_jobs(root, vec![solved, planned, missing]);
+        let manifest = manifest_with_jobs(root, vec![solved, failed, missing]);
         write_manifest(root, &manifest);
 
         let summary = library_summary_for_root(Some(root.to_str().unwrap())).unwrap();
@@ -906,6 +1062,123 @@ mod tests {
         assert!(summary.validation_errors[0]
             .message
             .contains("file is missing"));
+    }
+
+    #[test]
+    fn summary_counts_skipped_existing_jobs_with_existing_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let profile = profile("p1");
+        let relative_path = PathBuf::from("p1.bin");
+        let existing_path = root.join(&relative_path);
+        std::fs::write(&existing_path, b"not loaded by summary").unwrap();
+
+        let ranges = ranges();
+        let stack = first_stack(&profile);
+        let mut skipped =
+            JobManifestEntry::planned(&profile, &stack, Some(&ranges), [0, 4, 8], root);
+        skipped.output_relative_path = Some(relative_path);
+        skipped.path = Some(existing_path);
+        skipped.status = JobStatus::SkippedExisting;
+        let manifest = manifest_with_jobs(root, vec![skipped]);
+        write_manifest(root, &manifest);
+
+        let summary = library_summary_for_root(Some(root.to_str().unwrap())).unwrap();
+        assert_eq!(summary.solved_job_count, 1);
+        assert_eq!(summary.counts_by_profile_id.get("p1"), Some(&1));
+        assert!(summary.validation_errors.is_empty());
+    }
+
+    #[test]
+    fn summary_counts_planned_jobs_with_existing_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let profile = profile("p1");
+        let relative_path = PathBuf::from("p1.bin");
+        let existing_path = root.join(&relative_path);
+        std::fs::write(&existing_path, b"not loaded by summary").unwrap();
+
+        let ranges = ranges();
+        let stack = first_stack(&profile);
+        let mut planned =
+            JobManifestEntry::planned(&profile, &stack, Some(&ranges), [0, 4, 8], root);
+        planned.output_relative_path = Some(relative_path);
+        planned.path = Some(existing_path);
+        let manifest = manifest_with_jobs(root, vec![planned]);
+        write_manifest(root, &manifest);
+
+        let summary = library_summary_for_root(Some(root.to_str().unwrap())).unwrap();
+        assert_eq!(summary.solved_job_count, 1);
+        assert_eq!(summary.counts_by_profile_id.get("p1"), Some(&1));
+        assert!(summary.validation_errors.is_empty());
+    }
+
+    #[test]
+    fn summary_ignores_planned_jobs_with_missing_files_without_validation_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let profile = profile("p1");
+        let ranges = ranges();
+        let stack = first_stack(&profile);
+        let mut planned =
+            JobManifestEntry::planned(&profile, &stack, Some(&ranges), [0, 4, 8], root);
+        planned.output_relative_path = Some("missing.bin".into());
+        planned.path = Some(root.join("missing.bin"));
+        let manifest = manifest_with_jobs(root, vec![planned]);
+        write_manifest(root, &manifest);
+
+        let summary = library_summary_for_root(Some(root.to_str().unwrap())).unwrap();
+        assert_eq!(summary.solved_job_count, 0);
+        assert!(summary.validation_errors.is_empty());
+    }
+
+    #[test]
+    fn summary_includes_loadable_jobs_from_manifest_backups() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let profile_old = profile("p_old");
+        let profile_new = profile("p_new");
+        let ranges = ranges();
+
+        let old_relative_path = PathBuf::from("old.bin");
+        let new_relative_path = PathBuf::from("new.bin");
+        std::fs::write(root.join(&old_relative_path), b"old").unwrap();
+        std::fs::write(root.join(&new_relative_path), b"new").unwrap();
+
+        let mut old_job = JobManifestEntry::planned(
+            &profile_old,
+            &first_stack(&profile_old),
+            Some(&ranges),
+            [0, 4, 8],
+            root,
+        );
+        old_job.output_relative_path = Some(old_relative_path);
+        old_job.path = Some(root.join("old.bin"));
+        old_job.status = JobStatus::Solved;
+
+        let mut new_job = JobManifestEntry::planned(
+            &profile_new,
+            &first_stack(&profile_new),
+            Some(&ranges),
+            [1, 5, 9],
+            root,
+        );
+        new_job.output_relative_path = Some(new_relative_path);
+        new_job.path = Some(root.join("new.bin"));
+        new_job.status = JobStatus::Solved;
+
+        std::fs::write(
+            root.join("manifest.before-new-run.json"),
+            serde_json::to_string_pretty(&manifest_with_jobs(root, vec![old_job])).unwrap(),
+        )
+        .unwrap();
+        write_manifest(root, &manifest_with_jobs(root, vec![new_job]));
+
+        let summary = library_summary_for_root(Some(root.to_str().unwrap())).unwrap();
+        assert_eq!(summary.solved_job_count, 2);
+        assert_eq!(summary.counts_by_profile_id.get("p_old"), Some(&1));
+        assert_eq!(summary.counts_by_profile_id.get("p_new"), Some(&1));
+        assert!(summary.validation_errors.is_empty());
     }
 
     #[test]
@@ -1095,6 +1368,50 @@ mod tests {
         let mut bad_job = job;
         bad_job.flop = "2d3c4c".to_string();
         assert!(validate_loaded_game(&bad_job, &game, &memo).is_err());
+    }
+
+    #[test]
+    fn replay_path_matches_display_absolute_and_relative_paths() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let profile = profile("p1");
+        let ranges = ranges();
+        let relative_path = PathBuf::from("2bp/p1/job.bin");
+        let absolute_path = root.join(&relative_path);
+        std::fs::create_dir_all(absolute_path.parent().unwrap()).unwrap();
+        std::fs::write(&absolute_path, b"exists").unwrap();
+
+        let mut job = JobManifestEntry::planned(
+            &profile,
+            &first_stack(&profile),
+            Some(&ranges),
+            [0, 4, 8],
+            root,
+        );
+        job.status = JobStatus::Solved;
+        job.output_relative_path = Some(relative_path.clone());
+        job.path = Some(absolute_path.clone());
+        let jobs = vec![job];
+        let resolved = jobs
+            .iter()
+            .map(|job| ResolvedJob {
+                job,
+                path: absolute_path.clone(),
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            find_solved_job_by_path(&resolved, root, absolute_path.to_str().unwrap())
+                .unwrap()
+                .path,
+            absolute_path
+        );
+        assert_eq!(
+            find_solved_job_by_path(&resolved, root, relative_path.to_str().unwrap())
+                .unwrap()
+                .path,
+            absolute_path
+        );
     }
 
     #[test]

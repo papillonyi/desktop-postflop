@@ -1116,6 +1116,9 @@ fn execute_job_with_progress<W: IoWrite>(
     save_data_to_file(&game, &memo, &path, None)
         .map_err(|err| format!("failed to save {}: {err}", path.display()))?;
 
+    // Release the solver tree before loading a second copy for verification.
+    drop(game);
+
     write_stage_progress(progress, job, &start, "verify_saved_file", "")?;
     let (loaded, _memo): (PostFlopGame, _) = load_data_from_file(&path, None)
         .map_err(|err| format!("failed to verify saved file {}: {err}", path.display()))?;

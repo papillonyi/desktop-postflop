@@ -87,7 +87,7 @@ Then open:
 http://127.0.0.1:3000
 ```
 
-The current server serves `dist/` from this checkout and binds to `127.0.0.1:3000` by default. Set `DESKTOP_POSTFLOP_BIND` to override it; `server-start-public` and `server-start-public-with-build` set `DESKTOP_POSTFLOP_BIND=0.0.0.0:30001`.
+The current server serves `dist/` from this checkout and binds to `127.0.0.1:3000` by default. Set `DESKTOP_POSTFLOP_BIND` to override it; `server-start-public` and `server-start-public-with-build` default to `0.0.0.0:30001` unless `DESKTOP_POSTFLOP_BIND` is already set.
 
 ## Training Data Workflow
 

@@ -10,6 +10,7 @@ mod app_state;
 pub mod bunching;
 pub mod files;
 pub mod game;
+pub mod preflop;
 pub mod range;
 mod system;
 pub mod training;
@@ -85,6 +86,12 @@ pub fn app_with_state(state: SharedAppState) -> Router {
             post(training::library_summary),
         )
         .route("/api/training/session/start", post(training::session_start))
+        .route(
+            "/api/training/session/replay",
+            post(training::session_replay),
+        )
+        .route("/api/preflop/summary", get(preflop::summary))
+        .route("/api/preflop/decision/start", post(preflop::decision_start))
         .fallback_service(static_files)
         .with_state(std::sync::Arc::new(state))
 }

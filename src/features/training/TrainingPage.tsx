@@ -28,6 +28,7 @@ import {
   type ResultNavigationUpdate,
   type ResultNavigatorHandle,
 } from "../results/ResultNavigator";
+import { PreflopTrainingPanel } from "./PreflopTrainingPanel";
 
 const positions: TrainingPosition[] = ["UTG", "MP", "CO", "BTN", "SB", "BB"];
 const potTypes: TrainingPotType[] = ["2bp", "3bp", "4bp"];
@@ -49,6 +50,21 @@ type DecisionReview = {
   position: TrainingPosition;
   spot: string;
 };
+
+type PostflopTrainingSnapshot = {
+  cards: number[][];
+  currentHistory: number[];
+  decisionLog: DecisionReview[];
+  enabledPotTypes: TrainingPotType[];
+  heroPosition: TrainingPosition;
+  lastReview: DecisionReview | null;
+  root: string;
+  session: TrainingSession | null;
+  summary: TrainingLibrarySummary | null;
+  trainingMode: "postflop" | "preflop";
+};
+
+let postflopTrainingSnapshot: PostflopTrainingSnapshot | null = null;
 
 function playerIndex(player: TrainingPlayer) {
   return player === "oop" ? 0 : 1;
@@ -175,27 +191,50 @@ function ActionReview({ review }: { review: DecisionReview | null }) {
 }
 
 export function TrainingPage() {
+  const restoredSnapshot = postflopTrainingSnapshot;
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const navigatorRef = useRef<ResultNavigatorHandle | null>(null);
   const automationInFlightRef = useRef(false);
   const actionInFlightRef = useRef(false);
 
-  const [root, setRoot] = useState("../training-games-formal");
-  const [summary, setSummary] = useState<TrainingLibrarySummary | null>(null);
-  const [heroPosition, setHeroPosition] = useState<TrainingPosition>("BTN");
-  const [enabledPotTypes, setEnabledPotTypes] =
-    useState<TrainingPotType[]>(potTypes);
-  const [session, setSession] = useState<TrainingSession | null>(null);
-  const [cards, setCards] = useState<number[][]>([[], []]);
+  const [root, setRoot] = useState(
+    restoredSnapshot?.root ?? "../training-games-formal"
+  );
+  const [summary, setSummary] = useState<TrainingLibrarySummary | null>(
+    restoredSnapshot?.summary ?? null
+  );
+  const [heroPosition, setHeroPosition] = useState<TrainingPosition>(
+    restoredSnapshot?.heroPosition ?? "BTN"
+  );
+  const [enabledPotTypes, setEnabledPotTypes] = useState<TrainingPotType[]>(
+    restoredSnapshot?.enabledPotTypes ?? potTypes
+  );
+  const [trainingMode, setTrainingMode] = useState<"postflop" | "preflop">(
+    restoredSnapshot?.trainingMode ?? "postflop"
+  );
+  const [session, setSession] = useState<TrainingSession | null>(
+    restoredSnapshot?.session ?? null
+  );
+  const [cards, setCards] = useState<number[][]>(
+    restoredSnapshot?.cards ?? [[], []]
+  );
   const [navigatorKey, setNavigatorKey] = useState(0);
+  const [initialHistory, setInitialHistory] = useState<number[] | null>(
+    restoredSnapshot?.currentHistory ?? null
+  );
   const [navigatorUpdate, setNavigatorUpdate] =
     useState<ResultNavigationUpdate | null>(null);
-  const [lastReview, setLastReview] = useState<DecisionReview | null>(null);
-  const [decisionLog, setDecisionLog] = useState<DecisionReview[]>([]);
+  const [lastReview, setLastReview] = useState<DecisionReview | null>(
+    restoredSnapshot?.lastReview ?? null
+  );
+  const [decisionLog, setDecisionLog] = useState<DecisionReview[]>(
+    restoredSnapshot?.decisionLog ?? []
+  );
   const [error, setError] = useState("");
   const [loadingLibrary, setLoadingLibrary] = useState(false);
   const [startingSession, setStartingSession] = useState(false);
+  const [replayingSession, setReplayingSession] = useState(false);
 
   const terminal = navigatorUpdate?.selectedSpot?.type === "terminal";
   const heroHand = session?.heroHand.cards ?? [];
@@ -233,6 +272,52 @@ export function TrainingPage() {
     dispatch(setTrainingResult(true));
   };
 
+  const currentHistory = () =>
+    initialHistory ??
+    navigatorRef.current?.getSnapshot()?.currentHistory ??
+    navigatorUpdate?.currentHistory ??
+    [];
+
+  const savePostflopSnapshot = (
+    overrides: Partial<PostflopTrainingSnapshot> = {}
+  ) => {
+    postflopTrainingSnapshot = {
+      cards,
+      currentHistory: currentHistory(),
+      decisionLog,
+      enabledPotTypes,
+      heroPosition,
+      lastReview,
+      root,
+      session,
+      summary,
+      trainingMode,
+      ...overrides,
+    };
+  };
+
+  const resetCurrentTrainingRun = async (
+    nextSession: TrainingSession,
+    nextCards: number[][]
+  ) => {
+    await invokes.gameApplyHistory([]);
+    applyResultsState(nextSession);
+    setSession(nextSession);
+    setCards(nextCards);
+    setNavigatorUpdate(null);
+    setInitialHistory([]);
+    setLastReview(null);
+    setDecisionLog([]);
+    setNavigatorKey((key) => key + 1);
+    savePostflopSnapshot({
+      cards: nextCards,
+      currentHistory: [],
+      decisionLog: [],
+      lastReview: null,
+      session: nextSession,
+    });
+  };
+
   const startSession = async () => {
     setStartingSession(true);
     try {
@@ -241,15 +326,8 @@ export function TrainingPage() {
         heroPosition,
         potTypes: enabledPotTypes,
       });
-      await invokes.gameApplyHistory([]);
-      applyResultsState(nextSession);
       const nextCards = await invokes.gamePrivateCards();
-      setSession(nextSession);
-      setCards(nextCards);
-      setNavigatorUpdate(null);
-      setLastReview(null);
-      setDecisionLog([]);
-      setNavigatorKey((key) => key + 1);
+      await resetCurrentTrainingRun(nextSession, nextCards);
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -261,11 +339,45 @@ export function TrainingPage() {
   const viewResults = async () => {
     if (!session) return;
     try {
-      await invokes.gameApplyHistory([]);
+      const history = currentHistory();
+      savePostflopSnapshot({ currentHistory: history });
+      await invokes.gameApplyHistory(history);
       applyResultsState(session);
       navigate("/results");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const replaySameHand = async () => {
+    if (!session) return;
+    setReplayingSession(true);
+    try {
+      await resetCurrentTrainingRun(session, cards);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setReplayingSession(false);
+    }
+  };
+
+  const replayNewHand = async () => {
+    if (!session) return;
+    setReplayingSession(true);
+    try {
+      const nextSession = await invokes.trainingSessionReplay({
+        root: session.root,
+        heroPosition: session.heroPosition,
+        path: session.path,
+      });
+      const nextCards = await invokes.gamePrivateCards();
+      await resetCurrentTrainingRun(nextSession, nextCards);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setReplayingSession(false);
     }
   };
 
@@ -321,11 +433,33 @@ export function TrainingPage() {
     return false;
   };
 
+  const handleNavigatorUpdate = (update: ResultNavigationUpdate) => {
+    setNavigatorUpdate(update);
+    setInitialHistory(null);
+  };
+
   useEffect(() => {
     void reloadLibrary();
     // Initial library load intentionally uses the default local path.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    savePostflopSnapshot();
+    // This snapshot intentionally mirrors route-local UI state for restoration.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    cards,
+    decisionLog,
+    enabledPotTypes,
+    heroPosition,
+    lastReview,
+    navigatorUpdate,
+    root,
+    session,
+    summary,
+    trainingMode,
+  ]);
 
   useEffect(() => {
     if (!session || !navigatorUpdate || automationInFlightRef.current) return;
@@ -374,8 +508,40 @@ export function TrainingPage() {
     }, 120);
   }, [cards, navigatorUpdate, session]);
 
+  const trainingTabs = (
+    <div className="border-b border-gray-300 bg-white px-4 pt-3">
+      <div className="flex gap-2">
+        {(["postflop", "preflop"] as const).map((mode) => (
+          <button
+            className={[
+              "rounded-t border border-b-0 px-4 py-2 text-sm font-semibold",
+              trainingMode === mode
+                ? "border-gray-300 bg-gray-50 text-blue-700"
+                : "border-transparent bg-white text-gray-600 hover:bg-gray-100",
+            ].join(" ")}
+            key={mode}
+            onClick={() => setTrainingMode(mode)}
+            type="button"
+          >
+            {mode === "postflop" ? "Postflop" : "Preflop"}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  if (trainingMode === "preflop") {
+    return (
+      <div className="flex h-full min-h-0 flex-col bg-gray-50">
+        {trainingTabs}
+        <PreflopTrainingPanel />
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-gray-50">
+      {trainingTabs}
       <div className="border-b border-gray-300 bg-white px-4 py-3">
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex min-w-[18rem] flex-1 flex-col text-sm font-semibold">
@@ -471,10 +637,11 @@ export function TrainingPage() {
                   startingPot: session.startingPot,
                 }}
                 dealRequest={null}
+                initialHistory={initialHistory}
                 key={navigatorKey}
                 onActionClick={handleNavigatorAction}
                 onDealHandled={() => undefined}
-                onUpdate={setNavigatorUpdate}
+                onUpdate={handleNavigatorUpdate}
                 ref={navigatorRef}
                 showPotWithoutBets
                 showRates={false}
@@ -566,6 +733,33 @@ export function TrainingPage() {
                         : currentSpot
                         ? `${currentSpot.player.toUpperCase()} acting`
                         : "Loading"}
+                    </div>
+                  )}
+                  {session && (
+                    <div className="mt-4 border-t border-gray-200 pt-4">
+                      <div className="text-xs font-semibold uppercase text-gray-500">
+                        Replay
+                      </div>
+                      <div className="mt-2 flex flex-col gap-2">
+                        <button
+                          className="button-base button-gray flex items-center justify-center gap-2"
+                          disabled={replayingSession}
+                          onClick={replaySameHand}
+                          type="button"
+                        >
+                          <ArrowPathIcon className="h-5 w-5" />
+                          Same Hand
+                        </button>
+                        <button
+                          className="button-base button-gray flex items-center justify-center gap-2"
+                          disabled={replayingSession}
+                          onClick={replayNewHand}
+                          type="button"
+                        >
+                          <PlayIcon className="h-5 w-5" />
+                          New Cards
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

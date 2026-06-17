@@ -22,6 +22,7 @@ import { average, cardText, colorString, toFixed1 } from "../../utils";
 export type ResultNavigationUpdate = {
   chanceReports: ChanceReports | null;
   currentBoard: number[];
+  currentHistory: number[];
   results: Results;
   selectedChance: SpotChance | null;
   selectedSpot: Spot | null;
@@ -49,6 +50,7 @@ export type ResultNavigatorProps = {
   cards: number[][];
   config?: ResultNavigatorConfig;
   dealRequest: number | null;
+  initialHistory?: number[] | null;
   onActionClick?: (spot: SpotPlayer, actionIndex: number) => boolean | void;
   onDealHandled: () => void;
   onUpdate: (result: ResultNavigationUpdate) => void;
@@ -106,6 +108,7 @@ export const ResultNavigator = forwardRef<
     cards,
     config: configOverride,
     dealRequest,
+    initialHistory = null,
     onActionClick,
     onDealHandled,
     onUpdate,
@@ -121,6 +124,7 @@ export const ResultNavigator = forwardRef<
   const selectedSpotIndexRef = useRef(-1);
   const selectedChanceIndexRef = useRef(-1);
   const lockedRef = useRef(false);
+  const restoringRef = useRef(false);
   const resultsRef = useRef<Results | null>(null);
   const chanceReportsRef = useRef<ChanceReports | null>(null);
   const totalBetAmountRef = useRef([0, 0]);
@@ -156,6 +160,16 @@ export const ResultNavigator = forwardRef<
       }
     }
     return board;
+  };
+
+  const currentHistoryFromRefs = () => {
+    const endIndex =
+      selectedChanceIndexRef.current === -1
+        ? selectedSpotIndexRef.current
+        : selectedChanceIndexRef.current;
+    return spotsRef.current
+      .slice(1, endIndex)
+      .map((spot) => spot.selectedIndex);
   };
 
   const spliceSpotsTerminal = (spotIndex: number) => {
@@ -317,11 +331,13 @@ export const ResultNavigator = forwardRef<
   };
 
   const emitUpdate = () => {
+    if (restoringRef.current) return;
     const results = resultsRef.current;
     if (!results) return;
     onUpdate({
       chanceReports: chanceReportsRef.current,
       currentBoard: currentBoardFromRefs(),
+      currentHistory: currentHistoryFromRefs(),
       results,
       selectedChance:
         selectedChanceIndexRef.current === -1
@@ -434,13 +450,7 @@ export const ResultNavigator = forwardRef<
       }
     }
 
-    const endIndex =
-      selectedChanceIndexRef.current === -1
-        ? selectedSpotIndexRef.current
-        : selectedChanceIndexRef.current;
-    const history = spotsRef.current
-      .slice(1, endIndex)
-      .map((spot) => spot.selectedIndex);
+    const history = currentHistoryFromRefs();
 
     await invokes.gameApplyHistory(history);
     resultsRef.current = await invokes.gameGetResults();
@@ -568,6 +578,7 @@ export const ResultNavigator = forwardRef<
       return {
         chanceReports: chanceReportsRef.current,
         currentBoard: currentBoardFromRefs(),
+        currentHistory: currentHistoryFromRefs(),
         results,
         selectedChance:
           selectedChanceIndexRef.current === -1
@@ -604,6 +615,39 @@ export const ResultNavigator = forwardRef<
   }, [dealRequest]);
 
   useEffect(() => {
+    const restoreHistory = async (history: number[]) => {
+      for (const selectedIndex of history) {
+        const selectedChanceIndex = selectedChanceIndexRef.current;
+        const selectedChance =
+          selectedChanceIndex === -1
+            ? null
+            : (spotsRef.current[selectedChanceIndex] as SpotChance | undefined);
+
+        if (
+          selectedChance?.type === "chance" &&
+          selectedChance.selectedIndex === -1
+        ) {
+          const card = selectedChance.cards.find(
+            (item) => item.card === selectedIndex && !item.isDead
+          );
+          if (!card) return;
+          await deal(selectedChanceIndex, selectedIndex);
+          continue;
+        }
+
+        const selectedSpot = spotsRef.current[selectedSpotIndexRef.current];
+        if (selectedSpot?.type !== "player") return;
+        if (
+          !Number.isInteger(selectedIndex) ||
+          selectedIndex < 0 ||
+          selectedIndex >= selectedSpot.actions.length
+        ) {
+          return;
+        }
+        await play(selectedSpotIndexRef.current, selectedIndex);
+      }
+    };
+
     const init = async () => {
       const l = config.board.length;
       const spot: SpotRoot = {
@@ -618,7 +662,19 @@ export const ResultNavigator = forwardRef<
       setSpotsValue([spot]);
       selectedSpotIndexRef.current = -1;
       selectedChanceIndexRef.current = -1;
-      await selectSpot(1, true);
+      const shouldRestoreHistory = Boolean(initialHistory?.length);
+      restoringRef.current = shouldRestoreHistory;
+      try {
+        await selectSpot(1, true);
+        if (initialHistory?.length) {
+          await restoreHistory(initialHistory);
+        }
+      } finally {
+        restoringRef.current = false;
+        if (shouldRestoreHistory) {
+          emitUpdate();
+        }
+      }
     };
     init();
     // Result navigation intentionally initializes from the current solved game.
