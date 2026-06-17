@@ -3,6 +3,7 @@ import {
   ChartBarIcon,
   PlayIcon,
   ForwardIcon,
+  UserIcon,
 } from "@heroicons/react/24/solid";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
@@ -354,6 +355,27 @@ export function TrainingPage() {
     setReplayingSession(true);
     try {
       await resetCurrentTrainingRun(session, cards);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setReplayingSession(false);
+    }
+  };
+
+  const replaySameHero = async () => {
+    if (!session) return;
+    setReplayingSession(true);
+    try {
+      const nextSession = await invokes.trainingSessionReplay({
+        root: session.root,
+        heroPosition: session.heroPosition,
+        path: session.path,
+        heroHand: session.heroHand,
+        villainHand: session.villainHand,
+      });
+      const nextCards = await invokes.gamePrivateCards();
+      await resetCurrentTrainingRun(nextSession, nextCards);
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -749,6 +771,15 @@ export function TrainingPage() {
                         >
                           <ArrowPathIcon className="h-5 w-5" />
                           Same Hand
+                        </button>
+                        <button
+                          className="button-base button-gray flex items-center justify-center gap-2"
+                          disabled={replayingSession}
+                          onClick={replaySameHero}
+                          type="button"
+                        >
+                          <UserIcon className="h-5 w-5" />
+                          Same Hero
                         </button>
                         <button
                           className="button-base button-gray flex items-center justify-center gap-2"

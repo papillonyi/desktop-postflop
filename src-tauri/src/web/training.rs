@@ -37,6 +37,8 @@ pub struct SessionReplayRequest {
     pub root: Option<String>,
     pub hero_position: String,
     pub path: String,
+    pub hero_hand: Option<TrainingHandSelection>,
+    pub villain_hand: Option<TrainingHandSelection>,
 }
 
 #[derive(Debug, Serialize)]
@@ -69,7 +71,7 @@ pub struct LibrarySummaryResponse {
     pub validation_errors: Vec<TrainingValidationError>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrainingHandSelection {
     pub packed: u16,
@@ -232,7 +234,15 @@ fn start_session_from_request(
     while !candidates.is_empty() {
         let selected_index = choose_session_job_index(&candidates, &mut rng);
         let selected = candidates.swap_remove(selected_index);
-        match build_session_from_job(state.clone(), &library.root, &req, &selected, &mut rng) {
+        match build_session_from_job(
+            state.clone(),
+            &library.root,
+            &req,
+            &selected,
+            &mut rng,
+            None,
+            None,
+        ) {
             Ok(response) => return Ok(response),
             Err(err) => {
                 start_errors.push(TrainingValidationError {
@@ -286,6 +296,8 @@ fn replay_session_from_request(
         ));
     }
 
+    let fixed_hero_hand = req.hero_hand.clone();
+    let excluded_villain_hand = req.villain_hand.clone();
     let start_req = SessionStartRequest {
         root: req.root,
         hero_position: req.hero_position,
@@ -293,7 +305,15 @@ fn replay_session_from_request(
         profile_ids: None,
     };
     let mut rng = Lcg::new(random_seed());
-    build_session_from_job(state, &library.root, &start_req, &selected, &mut rng)
+    build_session_from_job(
+        state,
+        &library.root,
+        &start_req,
+        &selected,
+        &mut rng,
+        fixed_hero_hand.as_ref(),
+        excluded_villain_hand.as_ref(),
+    )
 }
 
 fn build_session_from_job(
@@ -302,6 +322,8 @@ fn build_session_from_job(
     req: &SessionStartRequest,
     selected: &ResolvedJob<'_>,
     rng: &mut Lcg,
+    fixed_hero_hand: Option<&TrainingHandSelection>,
+    excluded_villain_hand: Option<&TrainingHandSelection>,
 ) -> Result<SessionStartResponse, TrainingApiError> {
     let path = selected.path.clone();
     let (mut game, memo): (PostFlopGame, String) =
@@ -320,8 +342,18 @@ fn build_session_from_job(
         1
     };
     let villain_player_index = hero_player_index ^ 1;
-    let (hero_hand, villain_hand) = sample_hand_pair(&game, hero_player_index, rng)
-        .map_err(|message| TrainingApiError::new(StatusCode::BAD_REQUEST, message))?;
+    let (hero_hand, villain_hand) = if let Some(fixed_hero_hand) = fixed_hero_hand {
+        sample_villain_for_fixed_hero(
+            &game,
+            hero_player_index,
+            fixed_hero_hand,
+            excluded_villain_hand,
+            rng,
+        )
+    } else {
+        sample_hand_pair(&game, hero_player_index, rng)
+    }
+    .map_err(|message| TrainingApiError::new(StatusCode::BAD_REQUEST, message))?;
 
     let board = board_from_game(&game);
     let starting_pot = game.tree_config().starting_pot;
@@ -839,16 +871,120 @@ fn sample_hand_pair(
     Err("selected game has no non-overlapping weighted hand pairs".to_string())
 }
 
+fn sample_villain_for_fixed_hero(
+    game: &PostFlopGame,
+    hero_player: usize,
+    fixed_hero_hand: &TrainingHandSelection,
+    excluded_villain_hand: Option<&TrainingHandSelection>,
+    rng: &mut Lcg,
+) -> Result<(TrainingHandSelection, TrainingHandSelection), String> {
+    let villain_player = hero_player ^ 1;
+    let hero_cards = game.private_cards(hero_player);
+    let villain_cards = game.private_cards(villain_player);
+    let hero_weights = game.weights(hero_player);
+    let villain_weights = game.weights(villain_player);
+    let (hero_index, hero_hand) =
+        resolve_requested_hand(hero_cards, hero_weights, fixed_hero_hand, "hero")?;
+    let excluded_villain_index = excluded_villain_hand
+        .map(|hand| resolve_requested_hand(villain_cards, villain_weights, hand, "villain"))
+        .transpose()?
+        .map(|(index, _)| index);
+
+    let mut total = 0.0f64;
+    for (villain_index, villain_hand) in villain_cards.iter().enumerate() {
+        if Some(villain_index) == excluded_villain_index {
+            continue;
+        }
+        let villain_weight = f64::from(villain_weights[villain_index]);
+        if villain_weight > 0.0 && !hands_overlap(hero_hand, *villain_hand) {
+            total += villain_weight;
+        }
+    }
+
+    if total <= 0.0 {
+        return Err(if excluded_villain_index.is_some() {
+            "selected game has no different non-overlapping weighted villain hands for the requested hero hand"
+                .to_string()
+        } else {
+            "selected game has no non-overlapping weighted villain hands for the requested hero hand"
+                .to_string()
+        });
+    }
+
+    let mut ticket = rng.next_f64() * total;
+    for (villain_index, villain_hand) in villain_cards.iter().enumerate() {
+        if Some(villain_index) == excluded_villain_index {
+            continue;
+        }
+        let villain_weight = f64::from(villain_weights[villain_index]);
+        if villain_weight <= 0.0 || hands_overlap(hero_hand, *villain_hand) {
+            continue;
+        }
+        if ticket <= villain_weight {
+            return Ok((
+                hand_selection(hero_index, hero_hand),
+                hand_selection(villain_index, *villain_hand),
+            ));
+        }
+        ticket -= villain_weight;
+    }
+
+    for (villain_index, villain_hand) in villain_cards.iter().enumerate() {
+        if Some(villain_index) != excluded_villain_index
+            && villain_weights[villain_index] > 0.0
+            && !hands_overlap(hero_hand, *villain_hand)
+        {
+            return Ok((
+                hand_selection(hero_index, hero_hand),
+                hand_selection(villain_index, *villain_hand),
+            ));
+        }
+    }
+
+    Err(
+        "selected game has no non-overlapping weighted villain hands for the requested hero hand"
+            .to_string(),
+    )
+}
+
+fn resolve_requested_hand(
+    cards: &[(u8, u8)],
+    weights: &[f32],
+    selection: &TrainingHandSelection,
+    role: &str,
+) -> Result<(usize, (u8, u8)), String> {
+    let hand = cards
+        .get(selection.index)
+        .copied()
+        .ok_or_else(|| format!("{role} hand index {} is out of range", selection.index))?;
+    if packed_hand(hand) != selection.packed || hand_cards(hand) != selection.cards {
+        return Err(format!(
+            "{role} hand selection does not match the selected replay game"
+        ));
+    }
+    if weights.get(selection.index).copied().unwrap_or(0.0) <= 0.0 {
+        return Err(format!(
+            "{role} hand selection has no weight in the selected replay game"
+        ));
+    }
+
+    Ok((selection.index, hand))
+}
+
 fn hand_selection(index: usize, hand: (u8, u8)) -> TrainingHandSelection {
     TrainingHandSelection {
         packed: packed_hand(hand),
         index,
-        cards: [hand.0, hand.1],
+        cards: hand_cards(hand),
     }
 }
 
 fn packed_hand(hand: (u8, u8)) -> u16 {
     u16::from(hand.0) | (u16::from(hand.1) << 8)
+}
+
+fn hand_cards(hand: (u8, u8)) -> [u8; 2] {
+    [hand.0, hand.1]
 }
 
 fn hands_overlap(a: (u8, u8), b: (u8, u8)) -> bool {
@@ -1000,10 +1136,14 @@ mod tests {
     }
 
     fn ranges() -> LoadedProfileRanges {
+        ranges_with("AA", "KK")
+    }
+
+    fn ranges_with(oop_range: &str, ip_range: &str) -> LoadedProfileRanges {
         LoadedProfileRanges {
-            oop_range: "AA".to_string(),
-            ip_range: "KK".to_string(),
-            range_fingerprint: range_fingerprint("AA", "KK"),
+            oop_range: oop_range.to_string(),
+            ip_range: ip_range.to_string(),
+            range_fingerprint: range_fingerprint(oop_range, ip_range),
         }
     }
 
@@ -1450,6 +1590,52 @@ mod tests {
             response.hero_hand.packed
         );
         assert_eq!(state.range_state.lock().unwrap().0[0].to_string(), "AA");
+    }
+
+    #[test]
+    fn session_replay_can_keep_hero_hand_and_resample_villain() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let profile = profile("smoke_replay_same_hero_new_villain");
+        let ranges = ranges_with("KK,QQ", "AA");
+        let flop = [0, 4, 8];
+        let mut job =
+            JobManifestEntry::planned(&profile, &first_stack(&profile), Some(&ranges), flop, root);
+        execute_job(&profile, &ranges, flop, &mut job, true).unwrap();
+        let manifest = manifest_with_jobs(root, vec![job]);
+        write_manifest(root, &manifest);
+
+        let state = Arc::new(SharedAppState::single_user());
+        let response = start_session_from_request(
+            state.clone(),
+            SessionStartRequest {
+                root: Some(root.to_str().unwrap().to_string()),
+                hero_position: "BTN".to_string(),
+                pot_types: Some(vec!["2bp".to_string()]),
+                profile_ids: None,
+            },
+        )
+        .unwrap();
+
+        let replayed = replay_session_from_request(
+            state,
+            SessionReplayRequest {
+                root: Some(root.to_str().unwrap().to_string()),
+                hero_position: response.hero_position.clone(),
+                path: response.path.clone(),
+                hero_hand: Some(response.hero_hand.clone()),
+                villain_hand: Some(response.villain_hand.clone()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(replayed.hero_hand.index, response.hero_hand.index);
+        assert_eq!(replayed.hero_hand.packed, response.hero_hand.packed);
+        assert_eq!(replayed.hero_hand.cards, response.hero_hand.cards);
+        assert_ne!(replayed.villain_hand.packed, response.villain_hand.packed);
+        for hero_card in replayed.hero_hand.cards {
+            assert!(!replayed.villain_hand.cards.contains(&hero_card));
+        }
     }
 
     #[test]

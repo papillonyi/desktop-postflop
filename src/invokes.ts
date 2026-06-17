@@ -592,6 +592,8 @@ export const trainingSessionReplay = async (req: {
   root?: string;
   heroPosition: TrainingPosition;
   path: string;
+  heroHand?: TrainingHandSelection;
+  villainHand?: TrainingHandSelection;
 }): Promise<TrainingSession> => {
   return await apiPost<TrainingSession>("/training/session/replay", req);
 };
