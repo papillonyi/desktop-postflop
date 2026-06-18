@@ -59,14 +59,14 @@ frontend-build = "npm run build"
 lint = "npm run lint"
 format = "prettier --write src/**/*.{ts,vue}"
 cargo-check = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo check --manifest-path src-tauri/Cargo.toml"
-solver-test = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo test --manifest-path ../postflop-solver/Cargo.toml"
+solver-test = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo test --manifest-path postflop-solver/Cargo.toml"
 
 [dependencies]
 nodejs = ">=20,<21"
 rust = ">=1.88,<2"
 ```
 
-`postflop-solver` currently contains raw-pointer indexing code that triggers Rust 1.88+'s `dangerous_implicit_autorefs` deny-by-default lint. Keep the compatibility flag scoped to Rust Pixi tasks until the sibling solver crate is updated.
+`postflop-solver` currently contains raw-pointer indexing code that triggers Rust 1.88+'s `dangerous_implicit_autorefs` deny-by-default lint. Keep the compatibility flag scoped to Rust Pixi tasks until the solver crate is updated.
 
 - [ ] **Step 2: Edit `src-tauri/Cargo.toml`**
 
@@ -83,7 +83,7 @@ path = "src/bin/web_server.rs"
 serde_json = "1.0.107"
 serde = { version = "1.0.188", features = ["derive"] }
 tauri = { version = "1.5.0", features = ["dialog-all", "fs-read-file", "fs-write-file", "shell-open"] }
-postflop-solver = { path = "../../postflop-solver" }
+postflop-solver = { path = "../postflop-solver" }
 rayon = "1.8.0"
 sysinfo = "0.29.10"
 bincode = "=2.0.0-rc.3"
@@ -142,7 +142,7 @@ pixi run server-check
 pixi run cargo-check
 ```
 
-Expected: both commands pass. Warnings from the sibling `postflop-solver` crate are allowed in this phase.
+Expected: both commands pass. Warnings from the `postflop-solver` crate are allowed in this phase.
 
 - [ ] **Step 8: Commit**
 

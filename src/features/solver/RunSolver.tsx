@@ -6,6 +6,7 @@ import {
   setSolverFinished,
   setSolverPaused,
   setSolverRunning,
+  setTrainingResult,
 } from "../../app/slices/appSlice";
 import { setBoard, type TreeConfigState } from "../../app/slices/configSlice";
 import {
@@ -266,6 +267,7 @@ export function RunSolver() {
     dispatch(setSolverPaused(false));
     dispatch(setSolverFinished(false));
     dispatch(setSolverError(false));
+    dispatch(setTrainingResult(false));
   };
 
   const resumeSolver = async (
@@ -369,6 +371,7 @@ export function RunSolver() {
 
   const loadGame = async () => {
     await invokes.loadGameFromBin("desktop-postflop-game.bin");
+    dispatch(setTrainingResult(false));
     dispatch(setBoard(await invokes.loadBoardFromGame()));
   };
 

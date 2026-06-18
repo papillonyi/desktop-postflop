@@ -7,7 +7,9 @@ export default defineConfig({
   // Keep Rust server logs visible when Vite is run alongside server-dev.
   clearScreen: false,
   server: {
-    strictPort: true,
+    host: "0.0.0.0",
+    port: 30001,
+    strictPort: false,
     proxy: {
       "/api": {
         target: "http://127.0.0.1:3000",

@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import {
+  AcademicCapIcon,
   BeakerIcon,
   ChartBarIcon,
   Cog6ToothIcon,
@@ -65,10 +66,12 @@ export const solverRoutes: SolverRoute[] = [
 export const topRoutes = [
   { path: "/solver/ranges/oop", label: "Solver", icon: ComputerDesktopIcon },
   { path: "/results", label: "Results", icon: ChartBarIcon },
+  { path: "/training", label: "Training", icon: AcademicCapIcon },
 ];
 
 export function selectHeaderForPath(pathname: string) {
   if (pathname.startsWith("/results")) return "Results";
+  if (pathname.startsWith("/training")) return "Training";
   return (
     solverRoutes.find((route) => route.path === pathname)?.header ?? "OOP Range"
   );

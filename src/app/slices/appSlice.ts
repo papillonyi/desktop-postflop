@@ -9,6 +9,7 @@ type AppState = {
   isSolverFinished: boolean;
   isSolverError: boolean;
   isFinalizing: boolean;
+  isTrainingResult: boolean;
 };
 
 const initialState: AppState = {
@@ -20,6 +21,7 @@ const initialState: AppState = {
   isSolverFinished: false,
   isSolverError: false,
   isFinalizing: false,
+  isTrainingResult: false,
 };
 
 const appSlice = createSlice({
@@ -50,6 +52,9 @@ const appSlice = createSlice({
     setFinalizing(state, action: PayloadAction<boolean>) {
       state.isFinalizing = action.payload;
     },
+    setTrainingResult(state, action: PayloadAction<boolean>) {
+      state.isTrainingResult = action.payload;
+    },
   },
 });
 
@@ -62,6 +67,7 @@ export const {
   setSolverFinished,
   setSolverError,
   setFinalizing,
+  setTrainingResult,
 } = appSlice.actions;
 
 export default appSlice.reducer;

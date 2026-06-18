@@ -11,7 +11,7 @@ Phase 1 is an architecture migration, not a React rewrite and not a multi-user p
 - Do not rewrite the Vue frontend to React in phase 1.
 - Do not add multi-user sessions, authentication, quotas, or remote account management.
 - Do not redesign the solver UI or result visualization.
-- Do not change the external `../postflop-solver` crate except where a compile-time API mismatch forces it.
+- Keep solver changes scoped to the in-repo `postflop-solver/` crate unless an app integration change is also required.
 - Do not introduce a database-backed server persistence model in phase 1.
 
 ## Architecture

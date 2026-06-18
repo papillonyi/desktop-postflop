@@ -1,4 +1,3 @@
-import { CheckIcon } from "@heroicons/react/20/solid";
 import {
   BarElement,
   CategoryScale,
@@ -10,7 +9,7 @@ import {
   Title,
   Tooltip,
 } from "chart.js";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Bar, Line } from "react-chartjs-2";
 import { useAppSelector } from "../../app/hooks";
 import type {
@@ -22,7 +21,6 @@ import type {
   Spot,
   SpotChance,
   SpotPlayer,
-  SpotRoot,
 } from "../../result-types";
 import {
   barHeightList,
@@ -36,6 +34,7 @@ import {
 } from "../../result-types";
 import { BoardCard } from "../../shared/components/BoardCard";
 import * as invokes from "../../invokes";
+import { ResultNavigator } from "./ResultNavigator";
 import {
   average,
   cardId,
@@ -66,6 +65,7 @@ type LoadedResults = {
   cards: number[][];
   chanceReports: ChanceReports | null;
   currentBoard: number[];
+  currentHistory: number[];
   results: Results;
   selectedChance: SpotChance | null;
   selectedSpot: Spot | null;
@@ -83,23 +83,11 @@ const defaultDisplayOptions: DisplayOptions = {
   chartChance: "strategy-combos",
 };
 
-const foldColor = { red: 0x3b, green: 0x82, blue: 0xf6 };
-const checkColor = { red: 0x22, green: 0xc5, blue: 0x5e };
-const callColor = { red: 0x22, green: 0xc5, blue: 0x5e };
 const yellow500 = "#eab308";
 const sky500 = "#0ea5e9";
 const lime500 = "#84cc16";
 const chanceSuitColors = ["#16a34a", "#2563eb", "#db2777", "#000000"];
 const chanceSuitStacks = ["clubs", "diamonds", "hearts", "spades"];
-const betColorGradient = [
-  { red: 0xf5, green: 0x9e, blue: 0x0b },
-  { red: 0xf9, green: 0x73, blue: 0x16 },
-  { red: 0xef, green: 0x44, blue: 0x44 },
-  { red: 0xec, green: 0x48, blue: 0x99 },
-  { red: 0xd9, green: 0x46, blue: 0xef },
-  { red: 0xa8, green: 0x55, blue: 0xf7 },
-  { red: 0x8b, green: 0x5c, blue: 0xf6 },
-];
 const resultColorGradient = [
   { red: 0xef, green: 0x44, blue: 0x44 },
   { red: 0xf9, green: 0x73, blue: 0x16 },
@@ -147,35 +135,6 @@ function loadDisplayOptions(): DisplayOptions {
   }
 }
 
-function actionColor(
-  name: string,
-  index: number,
-  numActions: number,
-  numBetActions: number
-) {
-  if (name === "Fold") return colorString(foldColor);
-  if (name === "Check") return colorString(checkColor);
-  if (name === "Call") return colorString(callColor);
-  if (numBetActions <= 1) return colorString(betColorGradient[0]);
-  if (index === numActions - 1) {
-    const denom = numBetActions === 2 ? 2 : 1;
-    return colorString(betColorGradient[(betColorGradient.length - 1) / denom]);
-  }
-
-  const betIndex = index - (numActions - numBetActions);
-  const colorRate = betIndex / (numBetActions - 1);
-  const gradientRate = colorRate * (betColorGradient.length - 1);
-  const gradientIndex = Math.floor(gradientRate);
-  const r = gradientRate - gradientIndex;
-  const color1 = betColorGradient[gradientIndex];
-  const color2 = betColorGradient[gradientIndex + 1];
-  return colorString({
-    red: Math.round(color1.red * (1 - r) + color2.red * r),
-    green: Math.round(color1.green * (1 - r) + color2.green * r),
-    blue: Math.round(color1.blue * (1 - r) + color2.blue * r),
-  });
-}
-
 function resultColor(
   value: number,
   lowest: number,
@@ -216,6 +175,12 @@ function pairText(pair: number) {
   return [cardText(card1)];
 }
 
+function actionShortLabel(action: SpotPlayer["actions"][number]) {
+  return action.amount === "0"
+    ? action.name
+    : `${action.name[0]} ${action.amount}`;
+}
+
 function downloadText(filename: string, text: string) {
   const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -232,6 +197,49 @@ function formatPercent(value: number) {
 
 function formatEv(value: number) {
   return Number.isNaN(value) ? "-" : toFixedAdaptive(value);
+}
+
+function ActionStrategyBar({
+  actions,
+  values,
+}: {
+  actions: SpotPlayer["actions"];
+  values: number[];
+}) {
+  const total = values.reduce(
+    (sum, value) => sum + (Number.isFinite(value) ? Math.max(0, value) : 0),
+    0
+  );
+
+  if (actions.length === 0 || total <= 0) {
+    return <div className="h-3 min-w-24 rounded bg-neutral-300" />;
+  }
+
+  const shares = actions.map((_, index) => {
+    const value = Number.isFinite(values[index])
+      ? Math.max(0, values[index])
+      : 0;
+    return value / total;
+  });
+  const stops = actions.map((action, index) => {
+    const start = shares.slice(0, index).reduce((sum, share) => sum + share, 0);
+    const end = start + shares[index];
+    return `${action.color} ${start * 100}% ${end * 100}%`;
+  });
+  const title = actions
+    .map(
+      (action, index) =>
+        `${actionShortLabel(action)} ${formatPercent(values[index])}`
+    )
+    .join(", ");
+
+  return (
+    <div
+      className="h-3 min-w-24 rounded"
+      style={{ background: `linear-gradient(to right, ${stops.join(", ")})` }}
+      title={title}
+    />
+  );
 }
 
 function MiniBar({ values }: { values: number[] }) {
@@ -333,16 +341,8 @@ function ResultTable({
       ...actions
         .slice(0, numActions)
         .flatMap((action) => [
-          `${
-            action.amount === "0"
-              ? action.name
-              : `${action.name[0]} ${action.amount}`
-          } %`,
-          `${
-            action.amount === "0"
-              ? action.name
-              : `${action.name[0]} ${action.amount}`
-          } EV`,
+          `${actionShortLabel(action)} %`,
+          `${actionShortLabel(action)} EV`,
         ]),
     ];
     const lines = [
@@ -394,6 +394,11 @@ function ResultTable({
               <th className="border-b border-gray-300 px-2 py-1 text-right">
                 Weight
               </th>
+              {numActions > 0 && (
+                <th className="border-b border-gray-300 px-2 py-1 text-left">
+                  Actions
+                </th>
+              )}
               <th className="border-b border-gray-300 px-2 py-1 text-right">
                 EQ
               </th>
@@ -408,9 +413,7 @@ function ResultTable({
                   className="border-b border-gray-300 px-2 py-1 text-right"
                   key={`${action.name}-${action.amount}-${index}`}
                 >
-                  {action.amount === "0"
-                    ? action.name
-                    : `${action.name[0]} ${action.amount}`}
+                  {actionShortLabel(action)}
                 </th>
               ))}
             </tr>
@@ -420,25 +423,46 @@ function ResultTable({
               <tr className="bg-yellow-50 font-semibold">
                 <td className="border-b border-gray-200 px-2 py-1">Summary</td>
                 <td className="border-b border-gray-200 px-2 py-1 text-right">
-                  {toFixed1(summary[1] * 100)}%
+                  {formatPercent(summary[1])}
+                </td>
+                {numActions > 0 && (
+                  <td className="border-b border-gray-200 px-2 py-1">
+                    <ActionStrategyBar
+                      actions={actions}
+                      values={actions.map((_, index) => summary[6 + index * 2])}
+                    />
+                  </td>
+                )}
+                <td className="border-b border-gray-200 px-2 py-1 text-right">
+                  {formatPercent(summary[3])}
                 </td>
                 <td className="border-b border-gray-200 px-2 py-1 text-right">
-                  {toFixed1(summary[3] * 100)}%
+                  {formatEv(summary[4])}
                 </td>
                 <td className="border-b border-gray-200 px-2 py-1 text-right">
-                  {toFixedAdaptive(summary[4])}
-                </td>
-                <td className="border-b border-gray-200 px-2 py-1 text-right">
-                  {toFixed1(summary[5] * 100)}%
+                  {formatPercent(summary[5])}
                 </td>
                 {actions.slice(0, numActions).map((_, index) => (
                   <td
                     className="border-b border-gray-200 px-2 py-1 text-right"
                     key={index}
                   >
-                    {toFixed1(summary[6 + index * 2] * 100)}%
+                    <div>{formatPercent(summary[6 + index * 2])}</div>
+                    <div className="text-xs text-gray-500">
+                      {formatEv(summary[6 + index * 2 + 1])}
+                    </div>
                   </td>
                 ))}
+              </tr>
+            )}
+            {rows.length === 0 && (
+              <tr>
+                <td
+                  className="px-2 py-6 text-center font-semibold text-gray-500"
+                  colSpan={5 + (numActions > 0 ? 1 : 0) + numActions}
+                >
+                  No matching hands
+                </td>
               </tr>
             )}
             {rows.map((row) => {
@@ -467,24 +491,32 @@ function ResultTable({
                               : 0,
                         }}
                       />
-                      {toFixed1(row[1] * 100)}%
+                      {formatPercent(row[1])}
                     </div>
                   </td>
+                  {numActions > 0 && (
+                    <td className="border-b border-gray-100 px-2 py-1">
+                      <ActionStrategyBar
+                        actions={actions}
+                        values={actions.map((_, index) => row[6 + index * 2])}
+                      />
+                    </td>
+                  )}
                   <td className="border-b border-gray-100 px-2 py-1 text-right">
-                    {toFixed1(row[3] * 100)}%
+                    {formatPercent(row[3])}
                   </td>
                   <td className="border-b border-gray-100 px-2 py-1 text-right">
-                    {toFixedAdaptive(row[4])}
+                    {formatEv(row[4])}
                   </td>
                   <td className="border-b border-gray-100 px-2 py-1 text-right">
-                    {toFixed1(row[5] * 100)}%
+                    {formatPercent(row[5])}
                   </td>
                   {actions.slice(0, numActions).map((_, index) => (
                     <td
                       className="border-b border-gray-100 px-2 py-1 text-right"
                       key={index}
                     >
-                      <div>{toFixed1(row[6 + index * 2] * 100)}%</div>
+                      <div>{formatPercent(row[6 + index * 2])}</div>
                       <div className="text-xs text-gray-500">
                         {toFixed2(row[6 + index * 2 + 1])}
                       </div>
@@ -1298,629 +1330,12 @@ function ResultChance({
   );
 }
 
-function ResultNavigator({
-  cards,
-  dealRequest,
-  onDealHandled,
-  onUpdate,
-}: {
-  cards: number[][];
-  dealRequest: number | null;
-  onDealHandled: () => void;
-  onUpdate: (result: Omit<LoadedResults, "cards">) => void;
-}) {
-  const config = useAppSelector((state) => state.config);
-  const navRef = useRef<HTMLDivElement | null>(null);
-  const spotsRef = useRef<Spot[]>([]);
-  const selectedSpotIndexRef = useRef(-1);
-  const selectedChanceIndexRef = useRef(-1);
-  const lockedRef = useRef(false);
-  const resultsRef = useRef<Results | null>(null);
-  const chanceReportsRef = useRef<ChanceReports | null>(null);
-  const totalBetAmountRef = useRef([0, 0]);
-  const totalBetAmountAppendedRef = useRef([0, 0]);
-
-  const [spots, setSpots] = useState<Spot[]>([]);
-  const [selectedSpotIndex, setSelectedSpotIndex] = useState(-1);
-  const [selectedChanceIndex, setSelectedChanceIndex] = useState(-1);
-  const [rates, setRates] = useState<number[] | null>(null);
-
-  const setSpotsValue = (nextSpots: Spot[]) => {
-    spotsRef.current = nextSpots;
-    setSpots([...nextSpots]);
-  };
-
-  const isSelectedChanceSkipped = () =>
-    selectedChanceIndexRef.current !== -1 &&
-    (spotsRef.current[selectedChanceIndexRef.current] as SpotChance)
-      ?.selectedIndex === -1;
-
-  const currentBoardFromRefs = () => {
-    const board = [...config.board];
-    const endIndex =
-      selectedChanceIndexRef.current === -1
-        ? selectedSpotIndexRef.current
-        : selectedChanceIndexRef.current;
-    for (let i = 3; i < endIndex; ++i) {
-      const spot = spotsRef.current[i];
-      if (spot.type === "chance") {
-        const card = spot.selectedIndex;
-        if (card !== -1) board.push(card);
-        else return board;
-      }
-    }
-    return board;
-  };
-
-  const spliceSpotsTerminal = (spotIndex: number) => {
-    const results = resultsRef.current;
-    if (!results) throw new Error("null results");
-    const prevSpot = spotsRef.current[spotIndex - 1] as SpotPlayer;
-    const prevAction = prevSpot.actions[prevSpot.selectedIndex];
-    const chanceIndex = selectedChanceIndexRef.current;
-    const chanceSkipped =
-      chanceIndex !== -1 &&
-      (spotsRef.current[chanceIndex] as SpotChance).selectedIndex === -1;
-
-    let equityOop;
-    if (prevAction.name === "Fold") {
-      equityOop = prevSpot.player === "oop" ? 0 : 1;
-    } else if (chanceSkipped || results.isEmpty) {
-      equityOop = -1;
-    } else {
-      equityOop = average(results.equity[0], results.normalizer[0]);
-    }
-
-    const betSum =
-      totalBetAmountAppendedRef.current[0] +
-      totalBetAmountAppendedRef.current[1];
-    setSpotsValue([
-      ...spotsRef.current.slice(0, spotIndex),
-      {
-        type: "terminal",
-        index: spotIndex,
-        player: "end",
-        selectedIndex: -1,
-        prevPlayer: prevSpot.player,
-        equityOop,
-        pot: config.startingPot + betSum,
-      },
-    ]);
-  };
-
-  const spliceSpotsPlayer = (spotIndex: number, actions: string[]) => {
-    const prevSpot = spotsRef.current[spotIndex - 1];
-    const player = prevSpot.player === "oop" ? "ip" : "oop";
-    let numBetActions = actions.length;
-    if (actions[0]?.split(":")[1] === "0") numBetActions -= 1;
-    if (actions[1]?.split(":")[1] === "0") numBetActions -= 1;
-
-    setSpotsValue([
-      ...spotsRef.current.slice(0, spotIndex),
-      {
-        type: "player",
-        index: spotIndex,
-        player,
-        selectedIndex: -1,
-        actions: actions.map((action, i) => {
-          const [name, amount] = action.split(":");
-          return {
-            index: i,
-            name,
-            amount,
-            isSelected: false,
-            color: actionColor(name, i, actions.length, numBetActions),
-          };
-        }),
-      },
-    ]);
-  };
-
-  const spliceSpotsChance = async (spotIndex: number) => {
-    type SpotTurn = SpotRoot | SpotChance;
-    const prevSpot = spotsRef.current[spotIndex - 1] as SpotPlayer;
-    const turnSpot = spotsRef.current
-      .slice(0, spotIndex)
-      .find((spot) => spot.player === "turn") as SpotTurn | undefined;
-
-    let append: number[] = [];
-    if (selectedChanceIndexRef.current !== -1) {
-      append = spotsRef.current
-        .slice(selectedChanceIndexRef.current, spotIndex)
-        .map((spot) => spot.selectedIndex);
-    }
-
-    let possibleCards = 0n;
-    if (!(turnSpot?.type === "chance" && turnSpot.selectedIndex === -1)) {
-      possibleCards = await invokes.gamePossibleCards();
-    }
-
-    append.push(-1);
-    const nextActions = await invokes.gameActionsAfter(append);
-    let numBetActions = nextActions.length;
-    while (
-      numBetActions > 0 &&
-      nextActions[nextActions.length - numBetActions].split(":")[1] === "0"
-    ) {
-      numBetActions -= 1;
-    }
-
-    if (selectedChanceIndexRef.current === -1) {
-      chanceReportsRef.current = await invokes.gameGetChanceReports(
-        append,
-        "oop",
-        nextActions.length
-      );
-    }
-
-    setSpotsValue([
-      ...spotsRef.current.slice(0, spotIndex),
-      {
-        type: "chance",
-        index: spotIndex,
-        player: turnSpot ? "river" : "turn",
-        selectedIndex: -1,
-        prevPlayer: prevSpot.player,
-        cards: Array.from({ length: 52 }, (_, i) => ({
-          card: i,
-          isSelected: false,
-          isDead: !(possibleCards & (1n << BigInt(i))),
-        })),
-        pot: config.startingPot + 2 * totalBetAmountAppendedRef.current[0],
-        stack: config.effectiveStack - totalBetAmountAppendedRef.current[0],
-      },
-      {
-        type: "player",
-        index: spotIndex + 1,
-        player: "oop",
-        selectedIndex: -1,
-        actions: nextActions.map((action, i) => {
-          const [name, amount] = action.split(":");
-          return {
-            index: i,
-            name,
-            amount,
-            isSelected: false,
-            color: actionColor(name, i, nextActions.length, numBetActions),
-          };
-        }),
-      },
-    ]);
-    selectedSpotIndexRef.current += 1;
-    setSelectedSpotIndex(selectedSpotIndexRef.current);
-    if (selectedChanceIndexRef.current === -1) {
-      selectedChanceIndexRef.current = spotIndex;
-      setSelectedChanceIndex(spotIndex);
-    }
-  };
-
-  const emitUpdate = () => {
-    const results = resultsRef.current;
-    if (!results) return;
-    onUpdate({
-      chanceReports: chanceReportsRef.current,
-      currentBoard: currentBoardFromRefs(),
-      results,
-      selectedChance:
-        selectedChanceIndexRef.current === -1
-          ? null
-          : (spotsRef.current[selectedChanceIndexRef.current] as SpotChance),
-      selectedSpot:
-        selectedSpotIndexRef.current === -1
-          ? null
-          : spotsRef.current[selectedSpotIndexRef.current],
-      totalBetAmount: totalBetAmountRef.current,
-    });
-  };
-
-  const selectSpot = async (
-    spotIndex: number,
-    needSplice: boolean,
-    fromDeal = false
-  ) => {
-    if (
-      lockedRef.current ||
-      (!needSplice &&
-        ((spotIndex === selectedSpotIndexRef.current && !fromDeal) ||
-          spotIndex === selectedChanceIndexRef.current ||
-          (spotsRef.current[spotIndex]?.type === "chance" &&
-            isSelectedChanceSkipped() &&
-            spotIndex > selectedChanceIndexRef.current)))
-    ) {
-      return;
-    }
-
-    if (spotIndex === 0) {
-      await selectSpot(1, true);
-      return;
-    }
-
-    lockedRef.current = true;
-
-    if (fromDeal) {
-      const nextSpots = [...spotsRef.current];
-      const riverOffset = nextSpots
-        .slice(selectedChanceIndexRef.current + 3)
-        .findIndex((spot) => spot.type === "chance");
-      const riverIndex =
-        riverOffset === -1
-          ? -1
-          : riverOffset + selectedChanceIndexRef.current + 3;
-
-      selectedChanceIndexRef.current = -1;
-
-      if (riverIndex !== -1) {
-        const riverSpot = nextSpots[riverIndex] as SpotChance;
-        await invokes.gameApplyHistory(
-          nextSpots.slice(1, riverIndex).map((spot) => spot.selectedIndex)
-        );
-        const possibleCards = await invokes.gamePossibleCards();
-        let selectedIndex = riverSpot.selectedIndex;
-        const cards = riverSpot.cards.map((item) => {
-          const isDead = !(possibleCards & (1n << BigInt(item.card)));
-          if (item.card === selectedIndex && isDead) selectedIndex = -1;
-          return {
-            ...item,
-            isDead,
-            isSelected: item.card === selectedIndex,
-          };
-        });
-        nextSpots[riverIndex] = { ...riverSpot, cards, selectedIndex };
-      }
-
-      const riverSpot =
-        riverIndex === -1 ? null : (nextSpots[riverIndex] as SpotChance);
-      const riverSkipped = riverSpot?.selectedIndex === -1;
-      const lastIndex = nextSpots.length - 1;
-      const lastSpot = nextSpots[lastIndex];
-      if (
-        !riverSkipped &&
-        lastSpot?.type === "terminal" &&
-        lastSpot.equityOop !== 0 &&
-        lastSpot.equityOop !== 1
-      ) {
-        await invokes.gameApplyHistory(
-          nextSpots.slice(1, -1).map((spot) => spot.selectedIndex)
-        );
-        const terminalResults = await invokes.gameGetResults();
-        nextSpots[lastIndex] = {
-          ...lastSpot,
-          equityOop: terminalResults.isEmpty
-            ? -1
-            : average(terminalResults.equity[0], terminalResults.normalizer[0]),
-        };
-      }
-
-      setSpotsValue(nextSpots);
-    }
-
-    if (!needSplice && spotsRef.current[spotIndex].type === "chance") {
-      selectedChanceIndexRef.current = spotIndex;
-      if (selectedSpotIndexRef.current < spotIndex + 1) {
-        selectedSpotIndexRef.current = spotIndex + 1;
-      }
-    } else {
-      selectedSpotIndexRef.current = spotIndex;
-      if (spotIndex <= selectedChanceIndexRef.current) {
-        selectedChanceIndexRef.current = -1;
-      } else if (selectedChanceIndexRef.current === -1) {
-        selectedChanceIndexRef.current = spotsRef.current
-          .slice(0, spotIndex)
-          .findIndex(
-            (spot) => spot.type === "chance" && spot.selectedIndex === -1
-          );
-      }
-    }
-
-    const endIndex =
-      selectedChanceIndexRef.current === -1
-        ? selectedSpotIndexRef.current
-        : selectedChanceIndexRef.current;
-    const history = spotsRef.current
-      .slice(1, endIndex)
-      .map((spot) => spot.selectedIndex);
-
-    await invokes.gameApplyHistory(history);
-    resultsRef.current = await invokes.gameGetResults();
-
-    let append: number[] = [];
-    if (selectedChanceIndexRef.current !== -1) {
-      append = spotsRef.current
-        .slice(selectedChanceIndexRef.current, selectedSpotIndexRef.current)
-        .map((spot) => spot.selectedIndex);
-    }
-
-    const nextActions = await invokes.gameActionsAfter(append);
-    const canChanceReports =
-      selectedChanceIndexRef.current !== -1 &&
-      spotsRef.current
-        .slice(selectedChanceIndexRef.current + 3, selectedSpotIndexRef.current)
-        .every((spot) => spot.type !== "chance") &&
-      nextActions[0] !== "chance";
-
-    if (canChanceReports) {
-      const player =
-        nextActions[0] === "terminal"
-          ? "terminal"
-          : append.length % 2 === 1
-          ? "oop"
-          : "ip";
-      const numActions = nextActions[0] === "terminal" ? 0 : nextActions.length;
-      chanceReportsRef.current = await invokes.gameGetChanceReports(
-        append,
-        player,
-        numActions
-      );
-    } else {
-      chanceReportsRef.current = null;
-    }
-    totalBetAmountRef.current = await invokes.gameTotalBetAmount([]);
-    totalBetAmountAppendedRef.current =
-      await invokes.gameTotalBetAmount(append);
-
-    if (needSplice) {
-      if (nextActions[0] === "terminal") {
-        spliceSpotsTerminal(spotIndex);
-      } else if (nextActions[0] === "chance") {
-        await spliceSpotsChance(spotIndex);
-      } else {
-        spliceSpotsPlayer(spotIndex, nextActions);
-      }
-    }
-
-    const spot = spotsRef.current[selectedSpotIndexRef.current];
-    if (
-      spot?.type === "player" &&
-      selectedChanceIndexRef.current === -1 &&
-      resultsRef.current
-    ) {
-      const playerIndex = spot.player === "oop" ? 0 : 1;
-      if (resultsRef.current.isEmpty & (1 << playerIndex)) {
-        setRates(null);
-      } else {
-        const n = cards[playerIndex].length;
-        setRates(
-          Array.from({ length: spot.actions.length }, (_, i) => {
-            const strategy = resultsRef.current!.strategy.slice(
-              i * n,
-              (i + 1) * n
-            );
-            return average(
-              strategy,
-              resultsRef.current!.normalizer[playerIndex]
-            );
-          })
-        );
-      }
-    } else {
-      setRates(null);
-    }
-
-    setSelectedSpotIndex(selectedSpotIndexRef.current);
-    setSelectedChanceIndex(selectedChanceIndexRef.current);
-    lockedRef.current = false;
-    emitUpdate();
-
-    window.requestAnimationFrame(() => {
-      const selectedChild =
-        navRef.current?.children[selectedSpotIndexRef.current];
-      selectedChild?.scrollIntoView({ behavior: "smooth", inline: "center" });
-    });
-  };
-
-  const play = async (spotIndex: number, actionIndex: number) => {
-    const nextSpots = [...spotsRef.current];
-    const spot = { ...(nextSpots[spotIndex] as SpotPlayer) };
-    spot.actions = spot.actions.map((action, index) => ({
-      ...action,
-      isSelected: index === actionIndex,
-    }));
-    spot.selectedIndex = actionIndex;
-    nextSpots[spotIndex] = spot;
-    setSpotsValue(nextSpots);
-    await selectSpot(spotIndex + 1, true);
-  };
-
-  const deal = async (spotIndex: number, card: number) => {
-    const nextSpots = [...spotsRef.current];
-    const spot = { ...(nextSpots[spotIndex] as SpotChance) };
-    spot.cards = spot.cards.map((item) => ({
-      ...item,
-      isSelected: item.card === card,
-    }));
-    spot.selectedIndex = card;
-    nextSpots[spotIndex] = spot;
-    setSpotsValue(nextSpots);
-    await selectSpot(selectedSpotIndexRef.current, false, true);
-  };
-
-  useEffect(() => {
-    if (dealRequest === null) return;
-    const selectedChanceIndex = selectedChanceIndexRef.current;
-    if (selectedChanceIndex === -1) {
-      onDealHandled();
-      return;
-    }
-    deal(selectedChanceIndex, dealRequest).finally(onDealHandled);
-    // Deal requests intentionally call the current navigator state machine.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dealRequest]);
-
-  useEffect(() => {
-    const init = async () => {
-      const l = config.board.length;
-      const spot: SpotRoot = {
-        type: "root",
-        index: 0,
-        player: l === 3 ? "flop" : l === 4 ? "turn" : "river",
-        selectedIndex: -1,
-        board: config.board,
-        pot: config.startingPot,
-        stack: config.effectiveStack,
-      };
-      setSpotsValue([spot]);
-      selectedSpotIndexRef.current = -1;
-      selectedChanceIndexRef.current = -1;
-      await selectSpot(1, true);
-    };
-    init();
-    // Result navigation intentionally initializes from the current solved game.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const spotCards = (spot: SpotRoot | SpotChance) => {
-    if (spot.type === "root") return spot.board.map((card) => cardText(card));
-    if (spot.selectedIndex === -1) {
-      return [{ rank: "?", suit: "", colorClass: "text-black" }];
-    }
-    return [cardText(spot.selectedIndex)];
-  };
-
-  return (
-    <div
-      className="snug flex h-[10.5rem] gap-1 overflow-x-auto whitespace-nowrap p-1"
-      ref={navRef}
-    >
-      {spots.map((spot) => (
-        <div
-          className={[
-            "group flex h-full min-w-[5.25rem] flex-col justify-start rounded-lg border-[3px] px-1 py-0.5 shadow-md transition",
-            spot.type === "chance"
-              ? "hover:border-red-600"
-              : "hover:border-blue-600",
-            spot.index === selectedSpotIndex
-              ? "cursor-default border-blue-600"
-              : "cursor-pointer border-gray-400",
-          ].join(" ")}
-          key={spot.index}
-          onClick={() => selectSpot(spot.index, false)}
-        >
-          {(spot.type === "root" || spot.type === "chance") && (
-            <>
-              <div className="px-1.5 pb-0.5 pt-1 font-semibold opacity-70 group-hover:opacity-100">
-                {spot.player.toUpperCase()}
-              </div>
-              <div className="flex flex-grow flex-col items-center justify-evenly px-3 font-semibold">
-                {spotCards(spot).map((card) => (
-                  <span className={card.colorClass} key={card.rank + card.suit}>
-                    {card.rank}
-                    {card.suit}
-                  </span>
-                ))}
-                {spot.type === "chance" &&
-                  spot.index === selectedChanceIndex && (
-                    <div className="grid grid-cols-4 gap-1 text-xs">
-                      {spot.cards
-                        .filter((card) => !card.isDead)
-                        .slice(0, 12)
-                        .map((card) => {
-                          const text = cardText(card.card);
-                          return (
-                            <button
-                              className={[
-                                "rounded px-1",
-                                card.isSelected
-                                  ? "bg-blue-100"
-                                  : "hover:bg-gray-100",
-                                text.colorClass,
-                              ].join(" ")}
-                              key={card.card}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                deal(spot.index, card.card);
-                              }}
-                              type="button"
-                            >
-                              {text.rank}
-                              {text.suit}
-                            </button>
-                          );
-                        })}
-                    </div>
-                  )}
-              </div>
-            </>
-          )}
-
-          {spot.type === "player" && (
-            <>
-              <div
-                className={[
-                  "px-1.5 py-1 font-semibold group-hover:opacity-100",
-                  spot.index === selectedSpotIndex ? "" : "opacity-70",
-                ].join(" ")}
-              >
-                {spot.player.toUpperCase()}
-              </div>
-              <div className="flex-grow overflow-y-auto">
-                {spot.actions.map((action) => (
-                  <button
-                    className={[
-                      "flex w-full rounded-md px-1.5 transition-colors hover:bg-blue-100",
-                      action.isSelected ? "bg-blue-100" : "",
-                    ].join(" ")}
-                    key={action.index}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      play(spot.index, action.index);
-                    }}
-                    type="button"
-                  >
-                    <span className="relative mr-0.5 inline-block w-4">
-                      {action.isSelected && (
-                        <CheckIcon className="absolute -left-0.5 top-[0.1875rem] h-4 w-4" />
-                      )}
-                    </span>
-                    <span
-                      className={[
-                        "pr-0.5 font-semibold group-hover:opacity-100",
-                        action.isSelected || spot.index === selectedSpotIndex
-                          ? ""
-                          : "opacity-70",
-                      ].join(" ")}
-                    >
-                      {action.name} {action.amount === "0" ? "" : action.amount}
-                    </span>
-                    {rates && spot.index === selectedSpotIndex && (
-                      <span className="ml-auto text-xs text-gray-500">
-                        {toFixed1((rates[action.index] ?? 0) * 100)}%
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-
-          {spot.type === "terminal" && (
-            <>
-              <div
-                className={[
-                  "px-1.5 pb-0.5 pt-1 font-semibold group-hover:opacity-100",
-                  spot.index === selectedSpotIndex ? "" : "opacity-70",
-                ].join(" ")}
-              >
-                END
-              </div>
-              <div className="flex flex-grow flex-col items-center justify-evenly font-semibold">
-                {(spot.equityOop === 0 || spot.equityOop === 1) && (
-                  <div className="px-3">
-                    {["IP", "OOP"][spot.equityOop]} Wins
-                  </div>
-                )}
-                <div className="px-3">Pot {spot.pot}</div>
-              </div>
-            </>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export function ResultViewer() {
   const isSolverFinished = useAppSelector(
     (state) => state.app.isSolverFinished
+  );
+  const isTrainingResult = useAppSelector(
+    (state) => state.app.isTrainingResult
   );
   const [loaded, setLoaded] = useState<LoadedResults | null>(null);
   const [displayMode, setDisplayMode] = useState<DisplayMode>("basics");
@@ -1950,6 +1365,7 @@ export function ResultViewer() {
             cards,
             chanceReports: null,
             currentBoard: [],
+            currentHistory: [],
             results,
             selectedChance: null,
             selectedSpot: null,
@@ -2038,6 +1454,7 @@ export function ResultViewer() {
         dealRequest={dealRequest}
         onDealHandled={() => setDealRequest(null)}
         onUpdate={onNavigatorUpdate}
+        showPotWithoutBets={isTrainingResult}
       />
       <ResultMiddle
         autoPlayerBasics={autoPlayerBasics}

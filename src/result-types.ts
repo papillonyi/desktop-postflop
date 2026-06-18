@@ -53,6 +53,8 @@ export type SpotPlayer = {
   index: number;
   player: "oop" | "ip";
   selectedIndex: number;
+  pot?: number;
+  stack?: number;
   actions: {
     index: number;
     name: string;

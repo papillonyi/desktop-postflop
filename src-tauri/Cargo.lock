@@ -171,6 +171,7 @@ dependencies = [
  "postflop-solver",
  "rayon",
  "serde",
+ "serde_json",
  "sysinfo",
  "tempfile",
  "thiserror",
@@ -575,6 +576,7 @@ name = "postflop-solver"
 version = "0.1.0"
 dependencies = [
  "bincode",
+ "bincode_derive",
  "once_cell",
  "rayon",
  "regex",
