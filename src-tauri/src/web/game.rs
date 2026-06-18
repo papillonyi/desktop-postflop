@@ -1,4 +1,4 @@
-use crate::web::SharedAppState;
+use crate::web::{memory_guard, SharedAppState};
 use axum::{extract::State, Json};
 use postflop_solver::{
     compute_exploitability, finalize as solver_finalize, load_data_from_file,
@@ -55,6 +55,8 @@ pub struct ChanceReportsRequest {
 #[derive(Deserialize)]
 pub struct ThreadRequest {
     enable_compression: bool,
+    #[serde(default)]
+    include_bunching: bool,
 }
 
 #[derive(Serialize)]
@@ -378,12 +380,26 @@ pub async fn memory_usage_bunching(State(state): State<Arc<SharedAppState>>) -> 
 pub async fn allocate_memory(
     State(state): State<Arc<SharedAppState>>,
     Json(req): Json<ThreadRequest>,
-) {
-    state
-        .game_state
-        .lock()
-        .unwrap()
-        .allocate_memory(req.enable_compression);
+) -> Json<OptionalErrorResponse> {
+    let mut game = state.game_state.lock().unwrap();
+    let memory_usage = game.memory_usage();
+    let estimated_bytes = if req.enable_compression {
+        memory_usage.1
+    } else {
+        memory_usage.0
+    };
+    let estimated_bytes = if req.include_bunching {
+        estimated_bytes.saturating_add(game.memory_usage_bunching())
+    } else {
+        estimated_bytes
+    };
+    if let Err(error) =
+        memory_guard::check_memory_limit(estimated_bytes, memory_guard::default_game_memory_limit())
+    {
+        return Json(OptionalErrorResponse { error: Some(error) });
+    }
+    game.allocate_memory(req.enable_compression);
+    Json(OptionalErrorResponse { error: None })
 }
 
 pub async fn set_bunching(State(state): State<Arc<SharedAppState>>) -> Json<Option<String>> {
@@ -638,14 +654,16 @@ pub async fn load_from_file(
     State(state): State<Arc<SharedAppState>>,
     Json(path): Json<String>,
 ) -> Json<OptionalErrorResponse> {
-    let (game, _memo_string): (PostFlopGame, _) = match load_data_from_file(path, None) {
-        Ok(v) => v,
-        Err(err) => {
-            return Json(OptionalErrorResponse {
-                error: Some(err.to_string()),
-            })
-        }
-    };
+    *state.game_state.lock().unwrap() = PostFlopGame::default();
+    let (game, _memo_string): (PostFlopGame, _) =
+        match load_data_from_file(&path, memory_guard::default_game_memory_limit()) {
+            Ok(v) => v,
+            Err(err) => {
+                return Json(OptionalErrorResponse {
+                    error: Some(err.to_string()),
+                })
+            }
+        };
     *state.game_state.lock().unwrap() = game;
     let game_ranges = state.game_state.lock().unwrap().card_config().range;
     let mut ranges = state.range_state.lock().unwrap();

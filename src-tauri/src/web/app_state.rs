@@ -18,7 +18,19 @@ impl SharedAppState {
             tree_state: Mutex::new(default_action_tree()),
             bunching_state: Mutex::new(None),
             game_state: Mutex::new(PostFlopGame::default()),
-            pool_state: Mutex::new(ThreadPoolBuilder::new().build().unwrap()),
+            pool_state: Mutex::new(
+                ThreadPoolBuilder::new()
+                    .num_threads(default_thread_count())
+                    .build()
+                    .unwrap(),
+            ),
         }
     }
+}
+
+fn default_thread_count() -> usize {
+    std::thread::available_parallelism()
+        .map(|threads| threads.get())
+        .unwrap_or(1)
+        .min(4)
 }

@@ -24,7 +24,7 @@ export function BunchingEffect() {
   const startTime = useRef(0);
 
   const [numThreads, setNumThreads] = useState(
-    navigator.hardwareConcurrency || 1
+    Math.min(navigator.hardwareConcurrency || 1, 4)
   );
   const [editingPlayer, setEditingPlayer] = useState(-1);
   const [rangeTexts, setRangeTexts] = useState(["", "", "", ""]);

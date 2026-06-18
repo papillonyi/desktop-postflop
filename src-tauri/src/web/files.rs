@@ -7,8 +7,9 @@ use axum::{
 use std::io::{BufWriter, Write};
 use std::sync::Arc;
 use tempfile::NamedTempFile;
+use tokio_util::io::ReaderStream;
 
-use crate::web::SharedAppState;
+use crate::web::{memory_guard, SharedAppState};
 use postflop_solver::{load_data_from_file, DataType, FileData, PostFlopGame};
 
 pub async fn download(State(state): State<Arc<SharedAppState>>) -> Response {
@@ -64,7 +65,10 @@ pub async fn download(State(state): State<Arc<SharedAppState>>) -> Response {
         writer.flush().unwrap();
     }
 
-    let bytes = std::fs::read(path).unwrap();
+    let file = tokio::fs::File::open(&path)
+        .await
+        .expect("failed to open saved game file");
+    let stream = ReaderStream::new(file);
     (
         StatusCode::OK,
         [
@@ -74,7 +78,7 @@ pub async fn download(State(state): State<Arc<SharedAppState>>) -> Response {
                 "attachment; filename=\"desktop-postflop-game.bin\"",
             ),
         ],
-        Body::from(bytes),
+        Body::from_stream(stream),
     )
         .into_response()
 }
@@ -87,8 +91,15 @@ pub async fn upload(
     let mut found = false;
     while let Some(field) = multipart.next_field().await.expect("invalid multipart") {
         if field.name() == Some("file") {
-            let bytes = field.bytes().await.expect("read file bytes failed");
-            std::io::Write::write_all(&mut tmp, &bytes).expect("write tmp file failed");
+            let mut field = field;
+            while let Some(chunk) = match field.chunk().await {
+                Ok(chunk) => chunk,
+                Err(_) => return StatusCode::BAD_REQUEST,
+            } {
+                if std::io::Write::write_all(&mut tmp, &chunk).is_err() {
+                    return StatusCode::INTERNAL_SERVER_ERROR;
+                }
+            }
             found = true;
             break;
         }
@@ -101,10 +112,12 @@ pub async fn upload(
         .to_str()
         .expect("temporary path invalid")
         .to_string();
-    let (game, _memo): (PostFlopGame, _) = match load_data_from_file(path, None) {
-        Ok(v) => v,
-        Err(_) => return StatusCode::BAD_REQUEST,
-    };
+    *state.game_state.lock().unwrap() = PostFlopGame::default();
+    let (game, _memo): (PostFlopGame, _) =
+        match load_data_from_file(path, memory_guard::default_game_memory_limit()) {
+            Ok(v) => v,
+            Err(_) => return StatusCode::BAD_REQUEST,
+        };
     *state.game_state.lock().unwrap() = game;
     let game_ranges = state.game_state.lock().unwrap().card_config().range;
     let mut ranges = state.range_state.lock().unwrap();

@@ -192,7 +192,9 @@ pub fn load_data_from_std_read<T: FileData, R: Read>(
     let estimated_memory_usage: u64 = decode_from_std_read(reader, "Failed to read memory usage")?;
     if let Some(max_memory_usage) = max_memory_usage {
         if estimated_memory_usage > max_memory_usage {
-            return Err("Estimated memory usage is too large".to_string());
+            return Err(format!(
+                "Estimated memory usage is too large: estimated {estimated_memory_usage} bytes, limit {max_memory_usage} bytes"
+            ));
         }
     }
 

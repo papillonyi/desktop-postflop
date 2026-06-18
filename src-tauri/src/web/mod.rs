@@ -10,6 +10,7 @@ mod app_state;
 pub mod bunching;
 pub mod files;
 pub mod game;
+mod memory_guard;
 pub mod preflop;
 pub mod range;
 mod system;

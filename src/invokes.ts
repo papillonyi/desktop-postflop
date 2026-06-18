@@ -384,10 +384,20 @@ export const gameMemoryUsageBunching = async (): Promise<number> => {
   return resp.value;
 };
 
-export const gameAllocateMemory = async (enableCompression: boolean) => {
-  await apiPost("/game/allocate-memory", {
-    enable_compression: enableCompression,
-  });
+export const gameAllocateMemory = async (
+  enableCompression: boolean,
+  options?: {
+    includeBunching?: boolean;
+  }
+): Promise<string | null> => {
+  const resp = await apiPost<{ error: string | null }>(
+    "/game/allocate-memory",
+    {
+      enable_compression: enableCompression,
+      include_bunching: options?.includeBunching ?? false,
+    }
+  );
+  return resp.error;
 };
 
 export const gameSetBunching = async (): Promise<string | null> => {

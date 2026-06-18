@@ -1,5 +1,5 @@
 use crate::training_precompute::{flop_from_string, JobManifestEntry, JobStatus, Manifest};
-use crate::web::SharedAppState;
+use crate::web::{memory_guard, SharedAppState};
 use axum::{
     extract::State,
     http::StatusCode,
@@ -326,8 +326,9 @@ fn build_session_from_job(
     excluded_villain_hand: Option<&TrainingHandSelection>,
 ) -> Result<SessionStartResponse, TrainingApiError> {
     let path = selected.path.clone();
+    *state.game_state.lock().unwrap() = PostFlopGame::default();
     let (mut game, memo): (PostFlopGame, String) =
-        load_data_from_file(&path, None).map_err(|err| {
+        load_data_from_file(&path, memory_guard::default_game_memory_limit()).map_err(|err| {
             TrainingApiError::new(
                 StatusCode::BAD_REQUEST,
                 format!("failed to load selected game {}: {err}", path.display()),

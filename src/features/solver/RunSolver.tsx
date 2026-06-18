@@ -137,7 +137,7 @@ export function RunSolver() {
 
   const [savedConfig, setSavedConfig] = useState<TreeConfigState>(config);
   const [numThreads, setNumThreads] = useState(
-    navigator.hardwareConcurrency || 1
+    Math.min(navigator.hardwareConcurrency || 1, 4)
   );
   const [targetExploitability, setTargetExploitability] = useState(0.3);
   const [maxIterations, setMaxIterations] = useState(1000);
@@ -147,13 +147,7 @@ export function RunSolver() {
   const [memoryUsageRaw, setMemoryUsageRaw] = useState(0);
   const [memoryUsageRawCompressed, setMemoryUsageRawCompressed] = useState(0);
   const [memoryUsageBunching, setMemoryUsageBunching] = useState(0);
-  const [osName, setOsName] = useState<Awaited<
-    ReturnType<typeof invokes.osName>
-  > | null>(null);
-  const [maxMemoryUsage, setMaxMemoryUsage] = useState(0);
-  const [availableMemory, setAvailableMemory] = useState(0);
-  const [totalMemory, setTotalMemory] = useState(0);
-  const [isCompressionEnabled, setIsCompressionEnabled] = useState(false);
+  const [isCompressionEnabled, setIsCompressionEnabled] = useState(true);
   const [solverErrorText, setSolverErrorText] = useState("");
   const [currentIteration, setCurrentIteration] = useState(-1);
   const [exploitability, setExploitability] = useState(
@@ -169,9 +163,6 @@ export function RunSolver() {
     app.isBunchingEnabled && app.bunchingFlop.length > 0
       ? memoryUsageRawCompressed + memoryUsageBunching
       : memoryUsageRawCompressed;
-  const memoryUsageSelected = isCompressionEnabled
-    ? memoryUsageCompressed
-    : memoryUsage;
   const flop = savedConfig.board.slice(0, 3);
   const areFlopMatching =
     !app.isBunchingEnabled ||
@@ -246,19 +237,9 @@ export function RunSolver() {
     const [raw, rawCompressed] = await invokes.gameMemoryUsage();
     setMemoryUsageRaw(raw);
     setMemoryUsageRawCompressed(rawCompressed);
-    setMemoryUsageBunching(await invokes.gameMemoryUsageBunching());
-
-    const nextOsName = await invokes.osName();
-    setOsName(nextOsName);
-    const [available, total] = await invokes.memory();
-    setAvailableMemory(available);
-    setTotalMemory(total);
-    const nextMaxMemoryUsage = nextOsName === "macos" ? total * 0.7 : available;
-    setMaxMemoryUsage(nextMaxMemoryUsage);
-
-    if (raw > nextMaxMemoryUsage && rawCompressed <= nextMaxMemoryUsage) {
-      setIsCompressionEnabled(true);
-    }
+    const bunching = await invokes.gameMemoryUsageBunching();
+    setMemoryUsageBunching(bunching);
+    setIsCompressionEnabled(true);
 
     setIsTreeBuilding(false);
     setIsTreeBuilt(true);
@@ -342,7 +323,18 @@ export function RunSolver() {
     startTime.current = performance.now();
 
     await invokes.setNumThreads(numThreads);
-    await invokes.gameAllocateMemory(isCompressionEnabled);
+    const allocationError = await invokes.gameAllocateMemory(
+      isCompressionEnabled,
+      {
+        includeBunching: app.isBunchingEnabled && app.bunchingFlop.length > 0,
+      }
+    );
+    if (allocationError) {
+      setSolverErrorText(`Error: ${allocationError}`);
+      dispatch(setSolverRunning(false));
+      dispatch(setSolverError(true));
+      return;
+    }
 
     if (app.isBunchingEnabled && app.bunchingFlop.length > 0) {
       setCurrentIteration(-2);
@@ -421,8 +413,7 @@ export function RunSolver() {
                 <span className="ml-1 inline-block w-[6.75rem]">
                   32-bit FP:
                 </span>
-                needs {formatBytes(memoryUsageRaw)} RAM{" "}
-                {memoryUsageRaw > maxMemoryUsage ? "(out of memory)" : ""}
+                needs {formatBytes(memoryUsage)} RAM
               </label>
             </div>
             <div className="ml-2">
@@ -438,33 +429,9 @@ export function RunSolver() {
                 <span className="ml-1 inline-block w-[6.75rem]">
                   16-bit integer:
                 </span>
-                needs {formatBytes(memoryUsageRawCompressed)} RAM{" "}
-                {memoryUsageRawCompressed > maxMemoryUsage
-                  ? "(out of memory)"
-                  : ""}
+                needs {formatBytes(memoryUsageCompressed)} RAM
               </label>
             </div>
-
-            {app.isBunchingEnabled && app.bunchingFlop.length > 0 && (
-              <div className="mt-1.5">
-                Additional RAM usage for bunching effect:{" "}
-                {formatBytes(memoryUsageBunching)}
-              </div>
-            )}
-            {memoryUsage > maxMemoryUsage && osName !== "macos" && (
-              <div className="mt-1.5">
-                Available RAM:{" "}
-                {(availableMemory / (1024 * 1024 * 1024)).toFixed(2)}GB /{" "}
-                {(totalMemory / (1024 * 1024 * 1024)).toFixed()}GB total
-              </div>
-            )}
-            {memoryUsage > maxMemoryUsage && osName === "macos" && (
-              <div className="mt-1.5">
-                RAM limit: {(maxMemoryUsage / (1024 * 1024 * 1024)).toFixed(1)}
-                GB (= 70% * {(totalMemory / (1024 * 1024 * 1024)).toFixed()}GB
-                total)
-              </div>
-            )}
 
             <div className="mt-4">
               Target exploitability:
@@ -527,7 +494,6 @@ export function RunSolver() {
                 disabled={
                   runState ||
                   app.isBunchingRunning ||
-                  memoryUsageSelected > maxMemoryUsage ||
                   !areFlopMatching ||
                   numThreads < 1 ||
                   numThreads > 64 ||
@@ -599,19 +565,6 @@ export function RunSolver() {
                 Load
               </button>
             </div>
-
-            {memoryUsage > maxMemoryUsage && !runState && (
-              <div className="mt-6">
-                <button
-                  className="button-base button-red"
-                  onClick={() => setMaxMemoryUsage(Number.POSITIVE_INFINITY)}
-                  type="button"
-                >
-                  Ignore RAM Limit (not recommended)
-                </button>
-              </div>
-            )}
-
             {runState && (
               <div className="mt-6">
                 <div className="flex items-center">
