@@ -5,7 +5,7 @@ import {
   ForwardIcon,
   UserIcon,
 } from "@heroicons/react/24/solid";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { useAppDispatch } from "../../app/hooks";
 import {
@@ -45,9 +45,11 @@ type ActionDetail = {
 
 type DecisionReview = {
   actionLabel: string;
+  actor: "hero" | "villain";
   actions: ActionDetail[];
   board: number[];
   handCards: number[];
+  order: number;
   position: TrainingPosition;
   spot: string;
 };
@@ -61,8 +63,10 @@ type PostflopTrainingSnapshot = {
   lastReview: DecisionReview | null;
   root: string;
   session: TrainingSession | null;
+  showVillainDecisionLog: boolean;
   summary: TrainingLibrarySummary | null;
   trainingMode: "postflop" | "preflop";
+  villainDecisionLog: DecisionReview[];
 };
 
 let postflopTrainingSnapshot: PostflopTrainingSnapshot | null = null;
@@ -198,6 +202,17 @@ export function TrainingPage() {
   const navigatorRef = useRef<ResultNavigatorHandle | null>(null);
   const automationInFlightRef = useRef(false);
   const actionInFlightRef = useRef(false);
+  const decisionOrderRef = useRef(
+    Math.max(
+      0,
+      ...(restoredSnapshot?.decisionLog ?? []).map(
+        (decision) => decision.order + 1
+      ),
+      ...(restoredSnapshot?.villainDecisionLog ?? []).map(
+        (decision) => decision.order + 1
+      )
+    )
+  );
 
   const [root, setRoot] = useState(
     restoredSnapshot?.root ?? "../training-games-formal"
@@ -232,12 +247,33 @@ export function TrainingPage() {
   const [decisionLog, setDecisionLog] = useState<DecisionReview[]>(
     restoredSnapshot?.decisionLog ?? []
   );
+  const [villainDecisionLog, setVillainDecisionLog] = useState<
+    DecisionReview[]
+  >(restoredSnapshot?.villainDecisionLog ?? []);
+  const [showVillainDecisionLog, setShowVillainDecisionLog] = useState(
+    restoredSnapshot?.showVillainDecisionLog ?? false
+  );
   const [error, setError] = useState("");
   const [loadingLibrary, setLoadingLibrary] = useState(false);
   const [startingSession, setStartingSession] = useState(false);
   const [replayingSession, setReplayingSession] = useState(false);
 
   const terminal = navigatorUpdate?.selectedSpot?.type === "terminal";
+  const visibleDecisionLog = showVillainDecisionLog
+    ? [...decisionLog, ...villainDecisionLog].sort(
+        (a, b) => a.order - b.order
+      )
+    : decisionLog;
+  const displayDecisionLog = (() => {
+    const counts: Record<DecisionReview["actor"], number> = {
+      hero: 0,
+      villain: 0,
+    };
+    return visibleDecisionLog.map((decision) => ({
+      decision,
+      actorDecisionNumber: ++counts[decision.actor],
+    }));
+  })();
   const heroHand = session?.heroHand.cards ?? [];
   const villainHand = session?.villainHand.cards ?? [];
   const currentSpot =
@@ -291,8 +327,10 @@ export function TrainingPage() {
       lastReview,
       root,
       session,
+      showVillainDecisionLog,
       summary,
       trainingMode,
+      villainDecisionLog,
       ...overrides,
     };
   };
@@ -309,6 +347,9 @@ export function TrainingPage() {
     setInitialHistory([]);
     setLastReview(null);
     setDecisionLog([]);
+    setVillainDecisionLog([]);
+    setShowVillainDecisionLog(false);
+    decisionOrderRef.current = 0;
     setNavigatorKey((key) => key + 1);
     savePostflopSnapshot({
       cards: nextCards,
@@ -316,6 +357,8 @@ export function TrainingPage() {
       decisionLog: [],
       lastReview: null,
       session: nextSession,
+      showVillainDecisionLog: false,
+      villainDecisionLog: [],
     });
   };
 
@@ -411,34 +454,59 @@ export function TrainingPage() {
     );
   };
 
-  const buildReview = (
-    spot: SpotPlayer,
-    actionIndex: number
-  ): DecisionReview | null => {
-    if (!session || !navigatorUpdate) return null;
-    const details = exactActionDetails(
-      navigatorUpdate.results,
-      cards,
-      session.heroPlayer,
-      session.heroHand.index,
-      spot.actions,
-      actionIndex
-    );
-    return {
-      actionLabel: actionLabel(spot.actions[actionIndex]),
-      actions: details,
-      board: navigatorUpdate.currentBoard,
-      handCards: session.heroHand.cards,
-      position: session.heroPosition,
-      spot: session.spot,
-    };
-  };
+  const nextDecisionOrder = useCallback(() => {
+    const order = decisionOrderRef.current;
+    decisionOrderRef.current += 1;
+    return order;
+  }, []);
+
+  const buildReview = useCallback(
+    (
+      spot: SpotPlayer,
+      actionIndex: number,
+      actor: DecisionReview["actor"],
+      player: TrainingPlayer,
+      handIndex: number,
+      handCards: number[],
+      position: TrainingPosition
+    ): DecisionReview | null => {
+      if (!session || !navigatorUpdate) return null;
+      const details = exactActionDetails(
+        navigatorUpdate.results,
+        cards,
+        player,
+        handIndex,
+        spot.actions,
+        actionIndex
+      );
+      return {
+        actionLabel: actionLabel(spot.actions[actionIndex]),
+        actor,
+        actions: details,
+        board: navigatorUpdate.currentBoard,
+        handCards,
+        order: nextDecisionOrder(),
+        position,
+        spot: session.spot,
+      };
+    },
+    [cards, navigatorUpdate, nextDecisionOrder, session]
+  );
 
   const chooseHeroAction = async (spot: SpotPlayer, actionIndex: number) => {
     if (actionInFlightRef.current) return;
     actionInFlightRef.current = true;
     try {
-      const review = buildReview(spot, actionIndex);
+      if (!session) return;
+      const review = buildReview(
+        spot,
+        actionIndex,
+        "hero",
+        session.heroPlayer,
+        session.heroHand.index,
+        session.heroHand.cards,
+        session.heroPosition
+      );
       if (review) {
         setLastReview(review);
         setDecisionLog((current) => [...current, review]);
@@ -479,9 +547,17 @@ export function TrainingPage() {
     navigatorUpdate,
     root,
     session,
+    showVillainDecisionLog,
     summary,
     trainingMode,
+    villainDecisionLog,
   ]);
+
+  useEffect(() => {
+    if (terminal) {
+      setShowVillainDecisionLog(true);
+    }
+  }, [terminal]);
 
   useEffect(() => {
     if (!session || !navigatorUpdate || automationInFlightRef.current) return;
@@ -519,6 +595,18 @@ export function TrainingPage() {
       const actionIndex = chooseWeightedIndex(
         details.map((detail) => detail.probability)
       );
+      const review = buildReview(
+        spot,
+        actionIndex,
+        "villain",
+        session.villainPlayer,
+        session.villainHand.index,
+        session.villainHand.cards,
+        session.villainPosition
+      );
+      if (review) {
+        setVillainDecisionLog((current) => [...current, review]);
+      }
       await navigatorRef.current?.playSelected(actionIndex);
     };
 
@@ -528,7 +616,7 @@ export function TrainingPage() {
         automationInFlightRef.current = false;
       });
     }, 120);
-  }, [cards, navigatorUpdate, session]);
+  }, [buildReview, cards, navigatorUpdate, session]);
 
   const trainingTabs = (
     <div className="border-b border-gray-300 bg-white px-4 pt-3">
@@ -807,25 +895,33 @@ export function TrainingPage() {
           <div className="text-sm font-semibold uppercase text-gray-500">
             Decision Log
           </div>
-          {decisionLog.length === 0 ? (
+          {visibleDecisionLog.length === 0 ? (
             <div className="mt-4 text-sm text-gray-500">No decisions yet.</div>
           ) : (
             <div className="mt-4 flex flex-col gap-3">
-              {decisionLog.map((decision, index) => (
+              {displayDecisionLog.map(({ decision, actorDecisionNumber }) => (
                 <article
                   className="rounded border border-gray-200 bg-white p-3 shadow-sm"
-                  key={index}
+                  key={`${decision.actor}-${decision.order}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-xs font-semibold uppercase text-gray-500">
-                        Decision {index + 1}
+                        {decision.actor === "hero" ? "Hero" : "Villain"}{" "}
+                        Decision {actorDecisionNumber}
                       </div>
                       <div className="mt-1 text-sm font-semibold">
                         {decision.position} {formatHand(decision.handCards)}
                       </div>
                     </div>
-                    <div className="rounded bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
+                    <div
+                      className={[
+                        "rounded px-2 py-1 text-xs font-semibold",
+                        decision.actor === "villain"
+                          ? "bg-red-50 text-red-700"
+                          : "bg-blue-50 text-blue-700",
+                      ].join(" ")}
+                    >
                       {decision.actionLabel}
                     </div>
                   </div>
@@ -841,7 +937,9 @@ export function TrainingPage() {
                         className={[
                           "grid grid-cols-[minmax(0,1fr)_3.75rem_3.75rem] items-center gap-2 py-1.5",
                           action.isChosen
-                            ? "font-semibold text-blue-700"
+                            ? decision.actor === "villain"
+                              ? "font-semibold text-red-700"
+                              : "font-semibold text-blue-700"
                             : "text-gray-600",
                         ].join(" ")}
                         key={action.actionIndex}
