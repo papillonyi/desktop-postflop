@@ -118,6 +118,72 @@ export const memory = async (): Promise<number[]> => {
   return [resp.available, resp.total];
 };
 
+export type ServerStatus = {
+  status: "ok";
+  version: string;
+  uptimeSeconds: number;
+  nowUnixSeconds: number;
+  memory: {
+    available: number;
+    total: number;
+  };
+  threadPool: {
+    threads: number;
+  };
+  requests: {
+    total: number;
+    completed: number;
+    failed: number;
+    inFlight: number;
+    totalLatencyMs: number;
+    averageLatencyMs: number;
+  };
+};
+
+type ServerStatusResponse = {
+  status: "ok";
+  version: string;
+  uptime_seconds: number;
+  now_unix_seconds: number;
+  memory: {
+    available: number;
+    total: number;
+  };
+  thread_pool: {
+    threads: number;
+  };
+  requests: {
+    total: number;
+    completed: number;
+    failed: number;
+    in_flight: number;
+    total_latency_ms: number;
+    average_latency_ms: number;
+  };
+};
+
+export const serverStatus = async (): Promise<ServerStatus> => {
+  const resp = await apiGet<ServerStatusResponse>("/system/status");
+  return {
+    status: resp.status,
+    version: resp.version,
+    uptimeSeconds: resp.uptime_seconds,
+    nowUnixSeconds: resp.now_unix_seconds,
+    memory: resp.memory,
+    threadPool: {
+      threads: resp.thread_pool.threads,
+    },
+    requests: {
+      total: resp.requests.total,
+      completed: resp.requests.completed,
+      failed: resp.requests.failed,
+      inFlight: resp.requests.in_flight,
+      totalLatencyMs: resp.requests.total_latency_ms,
+      averageLatencyMs: resp.requests.average_latency_ms,
+    },
+  };
+};
+
 export const setNumThreads = async (numThreads: number) => {
   await apiPost("/system/threads", { num_threads: numThreads });
 };

@@ -1,10 +1,15 @@
 use axum::{
-    extract::State,
+    extract::{Request, State},
+    middleware::{self, Next},
+    response::Response,
     routing::{get, post},
     Router,
 };
-use std::path::PathBuf;
-use tower_http::services::{ServeDir, ServeFile};
+use std::{path::PathBuf, sync::Arc, time::Instant};
+use tower_http::{
+    services::{ServeDir, ServeFile},
+    trace::TraceLayer,
+};
 
 mod app_state;
 pub mod bunching;
@@ -23,11 +28,13 @@ pub fn app_with_state(state: SharedAppState) -> Router {
     let dist_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../dist");
     let static_files =
         ServeDir::new(&dist_dir).fallback(ServeFile::new(dist_dir.join("index.html")));
+    let state = Arc::new(state);
 
     Router::new()
         .route("/api/health", get(health))
         .route("/api/system/os-name", get(system::os_name))
         .route("/api/system/memory", get(system::memory))
+        .route("/api/system/status", get(system::status))
         .route("/api/system/threads", post(system::set_threads))
         .route("/api/range/{player}/num-combos", get(range::num_combos))
         .route("/api/range/{player}/clear", post(range::clear))
@@ -94,9 +101,42 @@ pub fn app_with_state(state: SharedAppState) -> Router {
         .route("/api/preflop/summary", get(preflop::summary))
         .route("/api/preflop/decision/start", post(preflop::decision_start))
         .fallback_service(static_files)
-        .with_state(std::sync::Arc::new(state))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            track_request_metrics,
+        ))
+        .layer(TraceLayer::new_for_http())
+        .with_state(state)
 }
 
-async fn health(State(_): State<std::sync::Arc<SharedAppState>>) -> &'static str {
+async fn health(State(_): State<Arc<SharedAppState>>) -> &'static str {
     "ok"
+}
+
+async fn track_request_metrics(
+    State(state): State<Arc<SharedAppState>>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let method = req.method().clone();
+    let path = req.uri().path().to_owned();
+    let started_at = Instant::now();
+
+    state.server_metrics.request_started();
+    let response = next.run(req).await;
+    let latency = started_at.elapsed();
+    let status = response.status();
+    state
+        .server_metrics
+        .request_finished(status.is_server_error(), latency);
+
+    tracing::info!(
+        method = %method,
+        path = %path,
+        status = status.as_u16(),
+        latency_ms = latency.as_millis(),
+        "http request completed"
+    );
+
+    response
 }

@@ -6,6 +6,7 @@ import { BunchingEffect } from "../features/bunching/BunchingEffect";
 import { RangeEditor } from "../features/ranges/RangeEditor";
 import { ResultViewer } from "../features/results/ResultViewer";
 import { RunSolver } from "../features/solver/RunSolver";
+import { ServerStatusPage } from "../features/system/ServerStatusPage";
 import { TrainingPage } from "../features/training/TrainingPage";
 import { TreeConfig } from "../features/tree/TreeConfig";
 
@@ -38,6 +39,7 @@ export const router = createBrowserRouter([
       },
       { path: "results", element: <ResultViewer /> },
       { path: "training", element: <TrainingPage /> },
+      { path: "server", element: <ServerStatusPage /> },
       { path: "about", element: <AboutPage /> },
       { path: "*", element: <Navigate to="/solver/ranges/oop" replace /> },
     ],

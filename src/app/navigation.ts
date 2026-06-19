@@ -8,6 +8,7 @@ import {
   InformationCircleIcon,
   PlayCircleIcon,
   RectangleGroupIcon,
+  ServerStackIcon,
   Squares2X2Icon,
 } from "@heroicons/react/24/solid";
 
@@ -54,6 +55,12 @@ export const solverRoutes: SolverRoute[] = [
     label: "Run Solver",
     header: "Run Solver",
     icon: PlayCircleIcon,
+  },
+  {
+    path: "/server",
+    label: "Server",
+    header: "Server",
+    icon: ServerStackIcon,
   },
   {
     path: "/about",
