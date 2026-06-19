@@ -326,7 +326,6 @@ fn build_session_from_job(
     excluded_villain_hand: Option<&TrainingHandSelection>,
 ) -> Result<SessionStartResponse, TrainingApiError> {
     let path = selected.path.clone();
-    *state.game_state.lock().unwrap() = PostFlopGame::default();
     let (mut game, memo): (PostFlopGame, String) =
         load_data_from_file(&path, memory_guard::default_game_memory_limit()).map_err(|err| {
             TrainingApiError::new(

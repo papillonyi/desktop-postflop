@@ -1,4 +1,5 @@
 import {
+  ArrowDownTrayIcon,
   ArrowPathIcon,
   ChartBarIcon,
   PlayIcon,
@@ -30,6 +31,11 @@ import {
   type ResultNavigatorHandle,
 } from "../results/ResultNavigator";
 import { PreflopTrainingPanel } from "./PreflopTrainingPanel";
+import {
+  buildTrainingHistoryExport,
+  trainingHistoryFilename,
+  type TrainingHistoryDecision,
+} from "./trainingHistoryExport";
 
 const positions: TrainingPosition[] = ["UTG", "MP", "CO", "BTN", "SB", "BB"];
 const potTypes: TrainingPotType[] = ["2bp", "3bp", "4bp"];
@@ -43,16 +49,7 @@ type ActionDetail = {
   probability: number;
 };
 
-type DecisionReview = {
-  actionLabel: string;
-  actor: "hero" | "villain";
-  actions: ActionDetail[];
-  board: number[];
-  handCards: number[];
-  order: number;
-  position: TrainingPosition;
-  spot: string;
-};
+type DecisionReview = TrainingHistoryDecision;
 
 type PostflopTrainingSnapshot = {
   cards: number[][];
@@ -276,6 +273,7 @@ export function TrainingPage() {
   })();
   const heroHand = session?.heroHand.cards ?? [];
   const villainHand = session?.villainHand.cards ?? [];
+  const livePot = navigatorUpdate?.selectedSpot?.pot ?? session?.startingPot;
   const currentSpot =
     navigatorUpdate?.selectedSpot?.type === "player"
       ? navigatorUpdate.selectedSpot
@@ -444,6 +442,27 @@ export function TrainingPage() {
     } finally {
       setReplayingSession(false);
     }
+  };
+
+  const downloadTrainingHistory = () => {
+    if (!session) return;
+    const payload = buildTrainingHistoryExport({
+      currentBoard: navigatorUpdate?.currentBoard ?? session.board,
+      currentHistory: currentHistory(),
+      heroDecisions: decisionLog,
+      livePot: livePot ?? null,
+      session,
+      villainDecisions: villainDecisionLog,
+    });
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const downloadUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = trainingHistoryFilename(payload);
+    a.click();
+    URL.revokeObjectURL(downloadUrl);
   };
 
   const togglePotType = (potType: TrainingPotType) => {
@@ -753,7 +772,6 @@ export function TrainingPage() {
                 onDealHandled={() => undefined}
                 onUpdate={handleNavigatorUpdate}
                 ref={navigatorRef}
-                showPotWithoutBets
                 showRates={false}
               />
               <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_18rem] gap-4 p-4">
@@ -769,7 +787,7 @@ export function TrainingPage() {
                         </div>
                       </div>
                       <div className="text-right text-sm text-gray-600">
-                        <div>Pot {session.startingPot}</div>
+                        <div>Pot {livePot ?? session.startingPot}</div>
                         <div>Stack {session.effectiveStack}</div>
                         <div>Stack weight {session.stackWeight}</div>
                       </div>
@@ -878,6 +896,16 @@ export function TrainingPage() {
                           <PlayIcon className="h-5 w-5" />
                           New Cards
                         </button>
+                        {terminal && (
+                          <button
+                            className="button-base button-gray flex items-center justify-center gap-2"
+                            onClick={downloadTrainingHistory}
+                            type="button"
+                          >
+                            <ArrowDownTrayIcon className="h-5 w-5" />
+                            Download History
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}

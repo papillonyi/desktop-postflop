@@ -654,7 +654,6 @@ pub async fn load_from_file(
     State(state): State<Arc<SharedAppState>>,
     Json(path): Json<String>,
 ) -> Json<OptionalErrorResponse> {
-    *state.game_state.lock().unwrap() = PostFlopGame::default();
     let (game, _memo_string): (PostFlopGame, _) =
         match load_data_from_file(&path, memory_guard::default_game_memory_limit()) {
             Ok(v) => v,

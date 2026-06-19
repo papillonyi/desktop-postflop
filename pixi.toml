@@ -6,14 +6,14 @@ version = "0.1.0"
 
 [tasks]
 install = "npm install"
-dev = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo run --manifest-path src-tauri/Cargo.toml --bin web-server"
+dev = "DESKTOP_POSTFLOP_MAX_GAME_MEMORY_BYTES=26843545600 RUSTFLAGS='-A dangerous_implicit_autorefs' cargo run --manifest-path src-tauri/Cargo.toml --bin web-server"
 frontend-dev = "npm run dev"
-server-dev = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo run --manifest-path src-tauri/Cargo.toml --bin web-server"
+server-dev = "DESKTOP_POSTFLOP_MAX_GAME_MEMORY_BYTES=26843545600 RUSTFLAGS='-A dangerous_implicit_autorefs' cargo run --manifest-path src-tauri/Cargo.toml --bin web-server"
 server-check = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo check --manifest-path src-tauri/Cargo.toml --bin web-server"
 server-build = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo build --manifest-path src-tauri/Cargo.toml --bin web-server --release"
-server-start = "src-tauri/target/release/web-server"
-server-start-public = { cmd = "src-tauri/target/release/web-server", env = { DESKTOP_POSTFLOP_BIND = "0.0.0.0:30001" } }
-server-start-public-with-build = { cmd = "src-tauri/target/release/web-server", depends-on = ["frontend-build", "server-build"], env = { DESKTOP_POSTFLOP_BIND = "0.0.0.0:30001" } }
+server-start = { cmd = "src-tauri/target/release/web-server", env = { DESKTOP_POSTFLOP_MAX_GAME_MEMORY_BYTES = "26843545600" } }
+server-start-public = { cmd = "src-tauri/target/release/web-server", env = { DESKTOP_POSTFLOP_BIND = "0.0.0.0:30001", DESKTOP_POSTFLOP_MAX_GAME_MEMORY_BYTES = "26843545600" } }
+server-start-public-with-build = { cmd = "src-tauri/target/release/web-server", depends-on = ["frontend-build", "server-build"], env = { DESKTOP_POSTFLOP_BIND = "0.0.0.0:30001", DESKTOP_POSTFLOP_MAX_GAME_MEMORY_BYTES = "26843545600" } }
 training-precompute = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo run --manifest-path src-tauri/Cargo.toml --bin training-precompute --"
 training-precompute-release = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo run --manifest-path src-tauri/Cargo.toml --bin training-precompute --release --"
 build = "RUSTFLAGS='-A dangerous_implicit_autorefs' cargo build --manifest-path src-tauri/Cargo.toml --bin web-server --release"
