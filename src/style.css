@@ -36,6 +36,54 @@ body {
     @apply bg-gray-600 hover:bg-gray-700 active:bg-gray-800 disabled:bg-gray-600;
 }
 
+.training-mobile-button {
+    min-height: 3.5rem;
+    @apply px-5 py-3 text-base;
+}
+
+.training-mobile-button > svg {
+    @apply h-6 w-6;
+}
+
+.training-mobile-choice {
+    min-height: 3.5rem;
+    @apply px-4 py-3 text-base;
+}
+
+.training-mobile-choice > input {
+    @apply h-5 w-5;
+}
+
+.training-mobile-tab {
+    min-height: 3rem;
+    @apply px-4 py-3 text-base;
+}
+
+@media (min-width: 640px) {
+    .training-mobile-button {
+        min-height: 2.75rem;
+        @apply px-3.5 py-1.5 text-sm;
+    }
+
+    .training-mobile-button > svg {
+        @apply h-5 w-5;
+    }
+
+    .training-mobile-choice {
+        min-height: 2.75rem;
+        @apply px-3 py-2 text-sm;
+    }
+
+    .training-mobile-choice > input {
+        @apply h-4 w-4;
+    }
+
+    .training-mobile-tab {
+        min-height: 0;
+        @apply px-4 py-2 text-sm;
+    }
+}
+
 input.input-error {
     @apply !ring-1 !ring-red-600 !border-red-600 !bg-red-50;
 }

@@ -48,12 +48,14 @@ export type ResultNavigatorHandle = {
 
 export type ResultNavigatorProps = {
   cards: number[][];
+  className?: string;
   config?: ResultNavigatorConfig;
   dealRequest: number | null;
   initialHistory?: number[] | null;
   onActionClick?: (spot: SpotPlayer, actionIndex: number) => boolean | void;
   onDealHandled: () => void;
   onUpdate: (result: ResultNavigationUpdate) => void;
+  readOnly?: boolean;
   showPotWithoutBets?: boolean;
   showRates?: boolean;
 };
@@ -106,12 +108,14 @@ export const ResultNavigator = forwardRef<
 >(function ResultNavigator(
   {
     cards,
+    className,
     config: configOverride,
     dealRequest,
     initialHistory = null,
     onActionClick,
     onDealHandled,
     onUpdate,
+    readOnly = false,
     showPotWithoutBets = false,
     showRates = true,
   },
@@ -698,7 +702,12 @@ export const ResultNavigator = forwardRef<
 
   return (
     <div
-      className="snug flex h-[11.5rem] shrink-0 gap-1 overflow-x-auto whitespace-nowrap p-1"
+      className={[
+        "snug flex h-[11.5rem] shrink-0 gap-1 overflow-x-auto whitespace-nowrap p-1",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
       ref={navRef}
     >
       {spots.map((spot) => (
@@ -710,10 +719,14 @@ export const ResultNavigator = forwardRef<
               : "hover:border-blue-600",
             spot.index === selectedSpotIndex
               ? "cursor-default border-blue-600"
+              : readOnly
+              ? "cursor-default border-gray-400"
               : "cursor-pointer border-gray-400",
           ].join(" ")}
           key={spot.index}
-          onClick={() => selectSpot(spot.index, false)}
+          onClick={() => {
+            if (!readOnly) selectSpot(spot.index, false);
+          }}
         >
           {(spot.type === "root" || spot.type === "chance") && (
             <>
@@ -747,6 +760,7 @@ export const ResultNavigator = forwardRef<
                               key={card.card}
                               onClick={(event) => {
                                 event.stopPropagation();
+                                if (readOnly) return;
                                 deal(spot.index, card.card);
                               }}
                               type="button"
@@ -786,6 +800,7 @@ export const ResultNavigator = forwardRef<
                     key={action.index}
                     onClick={(event) => {
                       event.stopPropagation();
+                      if (readOnly) return;
                       if (onActionClick?.(spot, action.index) === false) {
                         return;
                       }

@@ -398,6 +398,7 @@ fn build_session_from_job(
     excluded_villain_hand: Option<&TrainingHandSelection>,
 ) -> Result<SessionStartResponse, TrainingApiError> {
     let path = selected.path.clone();
+    state.clear_loaded_game();
     let (mut game, memo): (PostFlopGame, String) =
         load_data_from_file(&path, memory_guard::default_game_memory_limit()).map_err(|err| {
             TrainingApiError::new(
@@ -1784,6 +1785,66 @@ mod tests {
         for hero_card in new_cards.hero_hand.cards {
             assert!(!new_cards.villain_hand.cards.contains(&hero_card));
         }
+    }
+
+    #[test]
+    fn failed_job_load_clears_previous_game_state() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let profile = profile("smoke_failed_load_clears_game");
+        let ranges = ranges();
+        let flop = [0, 4, 8];
+        let mut job =
+            JobManifestEntry::planned(&profile, &first_stack(&profile), Some(&ranges), flop, root);
+        execute_job(&profile, &ranges, flop, &mut job, true).unwrap();
+        let job_path = job.path.as_ref().unwrap().clone();
+        let manifest = manifest_with_jobs(root, vec![job]);
+        write_manifest(root, &manifest);
+
+        let state = Arc::new(SharedAppState::single_user());
+        let response = start_session_from_request(
+            state.clone(),
+            SessionStartRequest {
+                root: Some(root.to_str().unwrap().to_string()),
+                hero_position: "BTN".to_string(),
+                pot_types: Some(vec!["2bp".to_string()]),
+                profile_ids: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(state.range_state.lock().unwrap().0[0].to_string(), "AA");
+
+        std::fs::write(&job_path, b"not a valid game").unwrap();
+        let selected = ResolvedJob {
+            job: &manifest.jobs[0],
+            path: job_path,
+        };
+        let start_req = SessionStartRequest {
+            root: Some(root.to_str().unwrap().to_string()),
+            hero_position: response.hero_position,
+            pot_types: None,
+            profile_ids: None,
+        };
+        let mut rng = Lcg::new(1);
+
+        let err = build_session_from_job(
+            state.clone(),
+            root,
+            &start_req,
+            &selected,
+            &mut rng,
+            None,
+            None,
+        )
+        .unwrap_err();
+
+        assert_eq!(err.status, StatusCode::BAD_REQUEST);
+        assert!(err.message.contains("failed to load selected game"));
+        assert!(state.active_training_session.lock().unwrap().is_none());
+        assert_eq!(
+            state.range_state.lock().unwrap().0[0].to_string(),
+            crate::web::range::RangeManager::default().0[0].to_string()
+        );
     }
 
     #[test]

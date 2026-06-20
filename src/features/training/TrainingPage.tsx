@@ -36,6 +36,10 @@ import {
   trainingHistoryFilename,
   type TrainingHistoryDecision,
 } from "./trainingHistoryExport";
+import {
+  buildVillainActionRange,
+  type VillainActionRangeSummary,
+} from "./villainActionRange";
 
 const positions: TrainingPosition[] = ["UTG", "MP", "CO", "BTN", "SB", "BB"];
 const potTypes: TrainingPotType[] = ["2bp", "3bp", "4bp"];
@@ -49,7 +53,9 @@ type ActionDetail = {
   probability: number;
 };
 
-type DecisionReview = TrainingHistoryDecision;
+type DecisionReview = TrainingHistoryDecision & {
+  villainActionRange?: VillainActionRangeSummary;
+};
 
 type PostflopTrainingSnapshot = {
   cards: number[][];
@@ -96,6 +102,10 @@ function formatProbability(value: number) {
 }
 
 function formatEv(value: number) {
+  return Number.isFinite(value) ? toFixed2(value) : "-";
+}
+
+function formatRangeWeight(value: number) {
   return Number.isFinite(value) ? toFixed2(value) : "-";
 }
 
@@ -151,43 +161,175 @@ function cardList(cards: number[]) {
   );
 }
 
-function ActionReview({ review }: { review: DecisionReview | null }) {
-  if (!review) {
+const rangeRanks = [
+  "A",
+  "K",
+  "Q",
+  "J",
+  "T",
+  "9",
+  "8",
+  "7",
+  "6",
+  "5",
+  "4",
+  "3",
+  "2",
+];
+
+function matrixHandClass(row: number, col: number) {
+  if (row === col) return `${rangeRanks[row]}${rangeRanks[col]}`;
+  if (row < col) return `${rangeRanks[row]}${rangeRanks[col]}s`;
+  return `${rangeRanks[col]}${rangeRanks[row]}o`;
+}
+
+function VillainActionRangePanel({
+  review,
+}: {
+  review: DecisionReview | null;
+}) {
+  const range = review?.villainActionRange;
+
+  if (!review || !range) {
     return (
-      <div className="rounded border border-gray-300 bg-white p-3 text-sm font-semibold text-gray-500 sm:p-4">
-        Choose an action to reveal this hand's GTO frequencies.
+      <div className="rounded border border-gray-300 bg-white xl:max-w-[40rem]">
+        <div className="border-b border-gray-200 px-3 py-3 sm:px-4">
+          <div className="text-sm font-semibold text-gray-500">
+            Villain range
+          </div>
+          <div className="mt-1 text-lg font-semibold">
+            No villain action yet
+          </div>
+        </div>
       </div>
     );
   }
 
+  const cellMap = new Map(
+    range.cells.map((cell) => [`${cell.row}:${cell.col}`, cell])
+  );
+  const maxCellWeight = Math.max(0, ...range.cells.map((cell) => cell.weight));
+
   return (
-    <div className="rounded border border-gray-300 bg-white">
-      <div className="border-b border-gray-200 px-3 py-3 sm:px-4">
-        <div className="text-sm font-semibold text-gray-500">
-          {review.position} {formatHand(review.handCards)} on{" "}
-          {formatBoard(review.board)}
-        </div>
-        <div className="mt-1 text-lg font-semibold">{review.actionLabel}</div>
-      </div>
-      <div className="divide-y divide-gray-100">
-        {review.actions.map((action) => (
-          <div
-            className={[
-              "grid grid-cols-[minmax(0,1fr)_4.5rem_4.5rem] items-center gap-2 px-3 py-2 text-sm sm:grid-cols-[1fr_5rem_5rem] sm:gap-3 sm:px-4",
-              action.isChosen ? "bg-blue-50 font-semibold" : "",
-            ].join(" ")}
-            key={action.actionIndex}
-          >
-            <span className="truncate">{actionLabel(action)}</span>
-            <span className="text-right">
-              {formatProbability(action.probability)}
-            </span>
-            <span className="text-right text-gray-600">
-              {formatEv(action.ev)}
-            </span>
+    <div className="rounded border border-gray-300 bg-white xl:max-w-[40rem]">
+      <div className="flex flex-col gap-2 border-b border-gray-200 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-4">
+        <div>
+          <div className="text-sm font-semibold text-gray-500">
+            Villain range
           </div>
-        ))}
+          <div className="mt-1 text-lg font-semibold">
+            After {review.actionLabel}
+          </div>
+        </div>
+        <div className="text-sm font-semibold text-gray-600 sm:text-right">
+          <div>{formatRangeWeight(range.totalWeight)} weighted combos</div>
+          <div>{range.cells.length} hand classes</div>
+        </div>
       </div>
+      {range.totalWeight <= 0 || range.cells.length === 0 ? (
+        <div className="px-3 py-4 text-sm font-semibold text-gray-500 sm:px-4">
+          No villain range available for this action.
+        </div>
+      ) : (
+        <div className="overflow-auto p-3 sm:p-4">
+          <div className="aspect-square min-w-[22rem] max-w-[34rem]">
+            <table className="snug h-full w-full table-fixed select-none">
+              <tbody>
+                {rangeRanks.map((_, row) => (
+                  <tr key={row}>
+                    {rangeRanks.map((__, col) => {
+                      const cell = cellMap.get(`${row}:${col}`);
+                      const height =
+                        cell && maxCellWeight > 0
+                          ? cell.weight / maxCellWeight
+                          : 0;
+                      const label = matrixHandClass(row, col);
+                      const cellTitle = cell
+                        ? [
+                            `${label}: ${formatRangeWeight(
+                              cell.weight
+                            )} weighted combos`,
+                            ...cell.combos.map(
+                              (combo) =>
+                                `${combo.label}: ${formatRangeWeight(
+                                  combo.weight
+                                )}`
+                            ),
+                          ].join("\n")
+                        : label;
+                      return (
+                        <td
+                          className="group relative border border-black outline-none hover:z-30 focus:z-30"
+                          key={`${row}-${col}`}
+                          tabIndex={cell ? 0 : undefined}
+                          title={cellTitle}
+                        >
+                          <div
+                            className={[
+                              "absolute left-0 top-0 flex h-full w-full bg-left-bottom bg-no-repeat",
+                              row === col ? "bg-neutral-700" : "bg-neutral-800",
+                            ].join(" ")}
+                            style={
+                              cell
+                                ? {
+                                    backgroundImage:
+                                      "linear-gradient(#eab308 0% 100%)",
+                                    backgroundSize: `100% ${height * 100}%`,
+                                  }
+                                : undefined
+                            }
+                          />
+                          <div
+                            className={[
+                              "absolute -top-px left-[0.1875rem] z-10 text-shadow",
+                              cell ? "text-white" : "text-neutral-500",
+                            ].join(" ")}
+                            style={{
+                              fontSize: "clamp(0.65rem, 0.9vw, 0.95rem)",
+                            }}
+                          >
+                            {label}
+                          </div>
+                          <div
+                            className="absolute bottom-px right-1 z-10 max-w-[calc(100%-0.25rem)] overflow-hidden text-shadow text-white"
+                            style={{
+                              fontSize: "clamp(0.55rem, 0.75vw, 0.8rem)",
+                            }}
+                          >
+                            {cell ? formatRangeWeight(cell.weight) : ""}
+                          </div>
+                          {cell && cell.combos.length > 0 && (
+                            <div className="pointer-events-none absolute left-1 top-full z-30 mt-1 hidden min-w-[13rem] rounded border border-gray-700 bg-white p-2 text-gray-900 shadow-lg group-hover:block group-focus:block">
+                              <div className="text-xs font-semibold">
+                                {label} possible combos
+                              </div>
+                              <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-[0.68rem] leading-tight">
+                                {cell.combos.map((combo) => (
+                                  <div
+                                    className="flex items-center justify-between gap-2"
+                                    key={combo.label}
+                                  >
+                                    <span className="font-semibold">
+                                      {combo.label}
+                                    </span>
+                                    <span className="text-gray-600">
+                                      {formatRangeWeight(combo.weight)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -256,9 +398,9 @@ export function TrainingPage() {
   const [replayingSession, setReplayingSession] = useState(false);
 
   const terminal = navigatorUpdate?.selectedSpot?.type === "terminal";
-  const visibleDecisionLog = showVillainDecisionLog
-    ? [...decisionLog, ...villainDecisionLog].sort((a, b) => a.order - b.order)
-    : decisionLog;
+  const visibleDecisionLog = [...decisionLog, ...villainDecisionLog].sort(
+    (a, b) => a.order - b.order
+  );
   const displayDecisionLog = (() => {
     const counts: Record<DecisionReview["actor"], number> = {
       hero: 0,
@@ -269,6 +411,9 @@ export function TrainingPage() {
       actorDecisionNumber: ++counts[decision.actor],
     }));
   })();
+  const latestVillainRangeReview = [...villainDecisionLog]
+    .reverse()
+    .find((decision) => decision.villainActionRange);
   const heroHand = session?.heroHand.cards ?? [];
   const villainHand = session?.villainHand.cards ?? [];
   const livePot = navigatorUpdate?.selectedSpot?.pot ?? session?.startingPot;
@@ -279,6 +424,15 @@ export function TrainingPage() {
   const isHeroTurn =
     Boolean(session && currentSpot?.player === session.heroPlayer) &&
     !navigatorUpdate?.selectedChance;
+  const actionStatus = terminal
+    ? "Hand complete"
+    : isHeroTurn && currentSpot
+    ? "Choose your action"
+    : navigatorUpdate?.selectedChance
+    ? "Dealing"
+    : currentSpot
+    ? `${currentSpot.player.toUpperCase()} acting`
+    : "Loading";
 
   const reloadLibrary = async () => {
     setLoadingLibrary(true);
@@ -485,7 +639,8 @@ export function TrainingPage() {
       player: TrainingPlayer,
       handIndex: number,
       handCards: number[],
-      position: TrainingPosition
+      position: TrainingPosition,
+      villainActionRange?: VillainActionRangeSummary
     ): DecisionReview | null => {
       if (!session || !navigatorUpdate) return null;
       const details = exactActionDetails(
@@ -505,6 +660,7 @@ export function TrainingPage() {
         order: nextDecisionOrder(),
         position,
         spot: session.spot,
+        villainActionRange,
       };
     },
     [cards, navigatorUpdate, nextDecisionOrder, session]
@@ -612,6 +768,12 @@ export function TrainingPage() {
       const actionIndex = chooseWeightedIndex(
         details.map((detail) => detail.probability)
       );
+      const villainActionRange = buildVillainActionRange({
+        actionIndex,
+        cards,
+        player: session.villainPlayer,
+        results: navigatorUpdate.results,
+      });
       const review = buildReview(
         spot,
         actionIndex,
@@ -619,7 +781,8 @@ export function TrainingPage() {
         session.villainPlayer,
         session.villainHand.index,
         session.villainHand.cards,
-        session.villainPosition
+        session.villainPosition,
+        villainActionRange
       );
       if (review) {
         setVillainDecisionLog((current) => [...current, review]);
@@ -644,12 +807,15 @@ export function TrainingPage() {
         .filter(Boolean)
         .join(" ")}
     >
-      <div className="text-sm font-semibold uppercase text-gray-500">
-        Action
+      <div>
+        <div className="text-sm font-semibold uppercase text-gray-500">
+          Action
+        </div>
+        <div className="mt-1 text-lg font-semibold">{actionStatus}</div>
       </div>
       {terminal ? (
         <button
-          className="button-base button-blue mt-4 flex w-full items-center justify-center gap-2"
+          className="button-base button-blue training-mobile-button mt-4 flex w-full items-center justify-center gap-2"
           disabled={startingSession}
           onClick={startSession}
           type="button"
@@ -661,7 +827,7 @@ export function TrainingPage() {
         <div className="mt-4 flex flex-col gap-2">
           {currentSpot.actions.map((action) => (
             <button
-              className="button-base button-blue flex min-h-11 items-center justify-center"
+              className="button-base button-blue training-mobile-button flex items-center justify-center"
               key={action.index}
               onClick={() => chooseHeroAction(currentSpot, action.index)}
               type="button"
@@ -686,7 +852,7 @@ export function TrainingPage() {
           </div>
           <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1">
             <button
-              className="button-base button-gray flex min-h-11 items-center justify-center gap-2"
+              className="button-base button-gray training-mobile-button flex items-center justify-center gap-2"
               disabled={replayingSession}
               onClick={replaySameHand}
               type="button"
@@ -695,7 +861,7 @@ export function TrainingPage() {
               Same Hand
             </button>
             <button
-              className="button-base button-gray flex min-h-11 items-center justify-center gap-2"
+              className="button-base button-gray training-mobile-button flex items-center justify-center gap-2"
               disabled={replayingSession}
               onClick={replaySameHero}
               type="button"
@@ -704,7 +870,7 @@ export function TrainingPage() {
               Same Hero
             </button>
             <button
-              className="button-base button-gray flex min-h-11 items-center justify-center gap-2"
+              className="button-base button-gray training-mobile-button flex items-center justify-center gap-2"
               disabled={replayingSession}
               onClick={replayNewHand}
               type="button"
@@ -714,7 +880,7 @@ export function TrainingPage() {
             </button>
             {terminal && (
               <button
-                className="button-base button-gray flex min-h-11 items-center justify-center gap-2 sm:col-span-3 lg:col-span-1"
+                className="button-base button-gray training-mobile-button flex items-center justify-center gap-2 sm:col-span-3 lg:col-span-1"
                 onClick={downloadTrainingHistory}
                 type="button"
               >
@@ -734,7 +900,7 @@ export function TrainingPage() {
         {(["postflop", "preflop"] as const).map((mode) => (
           <button
             className={[
-              "rounded-t border border-b-0 px-3 py-2 text-sm font-semibold sm:px-4",
+              "training-mobile-tab rounded-t border border-b-0 font-semibold",
               trainingMode === mode
                 ? "border-gray-300 bg-gray-50 text-blue-700"
                 : "border-transparent bg-white text-gray-600 hover:bg-gray-100",
@@ -773,7 +939,7 @@ export function TrainingPage() {
             />
           </label>
           <button
-            className="button-base button-gray flex min-h-11 w-full items-center justify-center gap-2 sm:w-auto"
+            className="button-base button-gray training-mobile-button flex w-full items-center justify-center gap-2 sm:w-auto"
             disabled={loadingLibrary}
             onClick={reloadLibrary}
             type="button"
@@ -800,7 +966,7 @@ export function TrainingPage() {
           <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:items-center">
             {potTypes.map((potType) => (
               <label
-                className="flex min-h-11 items-center justify-center gap-1 rounded border border-gray-300 px-3 py-2 text-sm font-semibold"
+                className="training-mobile-choice flex items-center justify-center gap-2 rounded border border-gray-300 font-semibold"
                 key={potType}
               >
                 <input
@@ -813,7 +979,7 @@ export function TrainingPage() {
             ))}
           </div>
           <button
-            className="button-base button-blue flex min-h-11 w-full items-center justify-center gap-2 sm:w-auto"
+            className="button-base button-blue training-mobile-button flex w-full items-center justify-center gap-2 sm:w-auto"
             disabled={startingSession || enabledPotTypes.length === 0}
             onClick={startSession}
             type="button"
@@ -823,7 +989,7 @@ export function TrainingPage() {
           </button>
           {session && (
             <button
-              className="button-base button-gray flex min-h-11 w-full items-center justify-center gap-2 sm:w-auto"
+              className="button-base button-gray training-mobile-button flex w-full items-center justify-center gap-2 sm:w-auto"
               onClick={viewResults}
               type="button"
             >
@@ -845,28 +1011,32 @@ export function TrainingPage() {
         )}
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_23rem] lg:overflow-hidden">
-        <div className="flex min-h-0 flex-col">
-          {session && cards[0]?.length > 0 ? (
-            <>
-              <ResultNavigator
-                cards={cards}
-                config={{
-                  board: session.board,
-                  effectiveStack: session.effectiveStack,
-                  startingPot: session.startingPot,
-                }}
-                dealRequest={null}
-                initialHistory={initialHistory}
-                key={navigatorKey}
-                onActionClick={handleNavigatorAction}
-                onDealHandled={() => undefined}
-                onUpdate={handleNavigatorUpdate}
-                ref={navigatorRef}
-                showRates={false}
-              />
-              <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 sm:gap-4 sm:p-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
-                <div className="flex min-h-0 flex-col gap-4">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {session && cards[0]?.length > 0 ? (
+          <div className="flex min-h-0 flex-col gap-3 p-3 sm:gap-4 sm:p-4">
+            <ResultNavigator
+              cards={cards}
+              config={{
+                board: session.board,
+                effectiveStack: session.effectiveStack,
+                startingPot: session.startingPot,
+              }}
+              dealRequest={null}
+              initialHistory={initialHistory}
+              key={navigatorKey}
+              onActionClick={handleNavigatorAction}
+              onDealHandled={() => undefined}
+              onUpdate={handleNavigatorUpdate}
+              readOnly
+              ref={navigatorRef}
+              showRates={false}
+            />
+
+            <div className="grid grid-cols-1 gap-3 sm:gap-4 xl:grid-cols-[minmax(0,1fr)_24rem] xl:items-start">
+              <div className="flex min-w-0 flex-col gap-3 sm:gap-4">
+                <div className="flex flex-col gap-3 sm:gap-4">
+                  {renderActionPanel()}
+
                   <div className="rounded border border-gray-300 bg-white p-3 sm:p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                       <div>
@@ -878,20 +1048,11 @@ export function TrainingPage() {
                         </div>
                       </div>
                       <div className="text-sm text-gray-600 sm:text-right">
-                        <div>Pot {livePot ?? session.startingPot}</div>
                         <div>Stack {session.effectiveStack}</div>
                         <div>Stack weight {session.stackWeight}</div>
                       </div>
                     </div>
                     <div className="mt-4 flex flex-wrap items-center gap-5">
-                      <div>
-                        <div className="mb-1 text-xs font-semibold uppercase text-gray-500">
-                          Board
-                        </div>
-                        {cardList(
-                          navigatorUpdate?.currentBoard ?? session.board
-                        )}
-                      </div>
                       <div>
                         <div className="mb-1 text-xs font-semibold uppercase text-gray-500">
                           Hero
@@ -912,89 +1073,110 @@ export function TrainingPage() {
                       </div>
                     </div>
                   </div>
-
-                  {renderActionPanel("lg:hidden")}
-                  <ActionReview review={lastReview} />
                 </div>
 
-                {renderActionPanel("hidden lg:block")}
+                <VillainActionRangePanel
+                  review={latestVillainRangeReview ?? null}
+                />
               </div>
-            </>
-          ) : (
-            <div className="flex min-h-[18rem] flex-1 items-center justify-center px-4 text-center text-gray-500 lg:h-full">
-              Start a new hand from a solved training library.
-            </div>
-          )}
-        </div>
 
-        <aside className="min-h-0 border-t border-gray-300 bg-white p-3 sm:p-4 lg:overflow-auto lg:border-l lg:border-t-0">
-          <div className="text-sm font-semibold uppercase text-gray-500">
-            Decision Log
-          </div>
-          {visibleDecisionLog.length === 0 ? (
-            <div className="mt-4 text-sm text-gray-500">No decisions yet.</div>
-          ) : (
-            <div className="mt-4 flex flex-col gap-3">
-              {displayDecisionLog.map(({ decision, actorDecisionNumber }) => (
-                <article
-                  className="rounded border border-gray-200 bg-white p-3 shadow-sm"
-                  key={`${decision.actor}-${decision.order}`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-xs font-semibold uppercase text-gray-500">
-                        {decision.actor === "hero" ? "Hero" : "Villain"}{" "}
-                        Decision {actorDecisionNumber}
-                      </div>
-                      <div className="mt-1 text-sm font-semibold">
-                        {decision.position} {formatHand(decision.handCards)}
-                      </div>
-                    </div>
-                    <div
-                      className={[
-                        "rounded px-2 py-1 text-xs font-semibold",
-                        decision.actor === "villain"
-                          ? "bg-red-50 text-red-700"
-                          : "bg-blue-50 text-blue-700",
-                      ].join(" ")}
-                    >
-                      {decision.actionLabel}
-                    </div>
+              <section className="rounded border border-gray-300 bg-white p-3 sm:p-4 xl:sticky xl:top-3 xl:max-h-[calc(100vh_-_8rem)] xl:overflow-auto">
+                <div className="text-sm font-semibold uppercase text-gray-500">
+                  Decision Log
+                </div>
+                {visibleDecisionLog.length === 0 ? (
+                  <div className="mt-4 text-sm text-gray-500">
+                    No decisions yet.
                   </div>
-                  <div className="mt-2 text-xs text-gray-500">
-                    {decision.spot}
+                ) : (
+                  <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-1">
+                    {displayDecisionLog.map(
+                      ({ decision, actorDecisionNumber }) => {
+                        const hideVillainPrivateDetails =
+                          decision.actor === "villain" && !terminal;
+                        return (
+                          <article
+                            className="rounded border border-gray-200 bg-white p-3 shadow-sm"
+                            key={`${decision.actor}-${decision.order}`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="text-xs font-semibold uppercase text-gray-500">
+                                  {decision.actor === "hero"
+                                    ? "Hero"
+                                    : "Villain"}{" "}
+                                  Decision {actorDecisionNumber}
+                                </div>
+                                <div className="mt-1 text-sm font-semibold">
+                                  {decision.position}{" "}
+                                  {hideVillainPrivateDetails
+                                    ? "Hidden hand"
+                                    : formatHand(decision.handCards)}
+                                </div>
+                              </div>
+                              <div
+                                className={[
+                                  "rounded px-2 py-1 text-xs font-semibold",
+                                  decision.actor === "villain"
+                                    ? "bg-red-50 text-red-700"
+                                    : "bg-blue-50 text-blue-700",
+                                ].join(" ")}
+                              >
+                                {decision.actionLabel}
+                              </div>
+                            </div>
+                            <div className="mt-2 text-xs text-gray-500">
+                              {decision.spot}
+                            </div>
+                            <div className="mt-1 text-xs text-gray-500">
+                              Board {formatBoard(decision.board)}
+                            </div>
+                            {hideVillainPrivateDetails ? (
+                              <div className="mt-3 border-t border-gray-100 pt-2 text-xs font-semibold text-gray-500">
+                                Villain hand-specific frequencies hidden until
+                                terminal.
+                              </div>
+                            ) : (
+                              <div className="mt-3 divide-y divide-gray-100 border-t border-gray-100 pt-2 text-xs">
+                                {decision.actions.map((action) => (
+                                  <div
+                                    className={[
+                                      "grid grid-cols-[minmax(0,1fr)_3.75rem_3.75rem] items-center gap-2 py-1.5",
+                                      action.isChosen
+                                        ? decision.actor === "villain"
+                                          ? "font-semibold text-red-700"
+                                          : "font-semibold text-blue-700"
+                                        : "text-gray-600",
+                                    ].join(" ")}
+                                    key={action.actionIndex}
+                                  >
+                                    <span className="truncate">
+                                      {actionLabel(action)}
+                                    </span>
+                                    <span className="text-right">
+                                      {formatProbability(action.probability)}
+                                    </span>
+                                    <span className="text-right">
+                                      {formatEv(action.ev)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </article>
+                        );
+                      }
+                    )}
                   </div>
-                  <div className="mt-1 text-xs text-gray-500">
-                    Board {formatBoard(decision.board)}
-                  </div>
-                  <div className="mt-3 divide-y divide-gray-100 border-t border-gray-100 pt-2 text-xs">
-                    {decision.actions.map((action) => (
-                      <div
-                        className={[
-                          "grid grid-cols-[minmax(0,1fr)_3.75rem_3.75rem] items-center gap-2 py-1.5",
-                          action.isChosen
-                            ? decision.actor === "villain"
-                              ? "font-semibold text-red-700"
-                              : "font-semibold text-blue-700"
-                            : "text-gray-600",
-                        ].join(" ")}
-                        key={action.actionIndex}
-                      >
-                        <span className="truncate">{actionLabel(action)}</span>
-                        <span className="text-right">
-                          {formatProbability(action.probability)}
-                        </span>
-                        <span className="text-right">
-                          {formatEv(action.ev)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </article>
-              ))}
+                )}
+              </section>
             </div>
-          )}
-        </aside>
+          </div>
+        ) : (
+          <div className="flex min-h-[18rem] flex-1 items-center justify-center px-4 text-center text-gray-500 lg:h-full">
+            Start a new hand from a solved training library.
+          </div>
+        )}
       </div>
     </div>
   );

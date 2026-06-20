@@ -49,6 +49,12 @@ impl SharedAppState {
             server_metrics: ServerMetrics::new(),
         }
     }
+
+    pub fn clear_loaded_game(&self) {
+        *self.game_state.lock().unwrap() = PostFlopGame::default();
+        *self.range_state.lock().unwrap() = RangeManager::default();
+        *self.active_training_session.lock().unwrap() = None;
+    }
 }
 
 pub struct ServerMetrics {

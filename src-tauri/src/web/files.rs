@@ -112,6 +112,7 @@ pub async fn upload(
         .to_str()
         .expect("temporary path invalid")
         .to_string();
+    state.clear_loaded_game();
     let (game, _memo): (PostFlopGame, _) =
         match load_data_from_file(path, memory_guard::default_game_memory_limit()) {
             Ok(v) => v,

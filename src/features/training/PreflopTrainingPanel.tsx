@@ -200,7 +200,7 @@ export function PreflopTrainingPanel() {
             </select>
           </label>
           <button
-            className="button-base button-blue flex min-h-11 w-full items-center justify-center gap-2 sm:w-auto"
+            className="button-base button-blue training-mobile-button flex w-full items-center justify-center gap-2 sm:w-auto"
             disabled={startingDecision}
             onClick={startDecision}
             type="button"
@@ -209,7 +209,7 @@ export function PreflopTrainingPanel() {
             New Decision
           </button>
           <button
-            className="button-base button-blue flex min-h-11 w-full items-center justify-center gap-2 sm:w-auto"
+            className="button-base button-blue training-mobile-button flex w-full items-center justify-center gap-2 sm:w-auto"
             disabled={loadingSummary}
             onClick={reloadSummary}
             type="button"
@@ -292,11 +292,11 @@ export function PreflopTrainingPanel() {
                 <div className="mb-2 text-xs font-semibold uppercase text-gray-500">
                   Actions
                 </div>
-                <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
+                <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:gap-2">
                   {decision.actions.map((action) => (
                     <button
                       className={[
-                        "button-base flex min-h-11 items-center justify-center sm:min-w-[7rem]",
+                        "button-base training-mobile-button flex items-center justify-center sm:min-w-[7rem]",
                         selectedAction === action.action
                           ? "button-green"
                           : "button-blue",
