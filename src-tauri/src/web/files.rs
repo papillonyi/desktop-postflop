@@ -122,5 +122,6 @@ pub async fn upload(
     let mut ranges = state.range_state.lock().unwrap();
     ranges.0[0] = game_ranges[0];
     ranges.0[1] = game_ranges[1];
+    *state.active_training_session.lock().unwrap() = None;
     StatusCode::NO_CONTENT
 }

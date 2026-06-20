@@ -347,7 +347,11 @@ pub async fn init(
     }
 
     let mut game = state.game_state.lock().unwrap();
-    Json(game.update_config(card_config, action_tree).err())
+    let result = game.update_config(card_config, action_tree);
+    if result.is_ok() {
+        *state.active_training_session.lock().unwrap() = None;
+    }
+    Json(result.err())
 }
 
 pub async fn private_cards(State(state): State<Arc<SharedAppState>>) -> Json<PrivateCardsResponse> {
@@ -668,6 +672,7 @@ pub async fn load_from_file(
     let mut ranges = state.range_state.lock().unwrap();
     ranges.0[0] = game_ranges[0];
     ranges.0[1] = game_ranges[1];
+    *state.active_training_session.lock().unwrap() = None;
     Json(OptionalErrorResponse { error: None })
 }
 

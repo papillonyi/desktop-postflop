@@ -1,5 +1,5 @@
 use crate::training_precompute::{flop_from_string, JobManifestEntry, JobStatus, Manifest};
-use crate::web::{memory_guard, SharedAppState};
+use crate::web::{memory_guard, ActiveTrainingSession, SharedAppState};
 use axum::{
     extract::State,
     http::StatusCode,
@@ -273,6 +273,10 @@ fn replay_session_from_request(
         ));
     }
 
+    if let Some(response) = replay_active_session_from_request(&state, &req)? {
+        return Ok(response);
+    }
+
     let library = load_training_library(req.root.as_deref())?;
     let (solved_jobs, validation_errors) = collect_solved_jobs(&library);
     let selected =
@@ -314,6 +318,74 @@ fn replay_session_from_request(
         fixed_hero_hand.as_ref(),
         excluded_villain_hand.as_ref(),
     )
+}
+
+fn replay_active_session_from_request(
+    state: &Arc<SharedAppState>,
+    req: &SessionReplayRequest,
+) -> Result<Option<SessionStartResponse>, TrainingApiError> {
+    let Some(active) = state.active_training_session.lock().unwrap().clone() else {
+        return Ok(None);
+    };
+    let root = display_path(&resolve_root(req.root.as_deref())?);
+    if active.root != root || active.path != req.path {
+        return Ok(None);
+    }
+
+    let hero_player_index = if active.oop_position == req.hero_position {
+        0
+    } else if active.ip_position == req.hero_position {
+        1
+    } else {
+        return Err(TrainingApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!(
+                "heroPosition {} is not part of selected replay spot",
+                req.hero_position
+            ),
+        ));
+    };
+    let villain_player_index = hero_player_index ^ 1;
+    let mut rng = Lcg::new(random_seed());
+    let mut game = state.game_state.lock().unwrap();
+    game.apply_history(&[]);
+    let (hero_hand, villain_hand) = if let Some(fixed_hero_hand) = req.hero_hand.as_ref() {
+        sample_villain_for_fixed_hero(
+            &game,
+            hero_player_index,
+            fixed_hero_hand,
+            req.villain_hand.as_ref(),
+            &mut rng,
+        )
+    } else {
+        sample_hand_pair(&game, hero_player_index, &mut rng)
+    }
+    .map_err(|message| TrainingApiError::new(StatusCode::BAD_REQUEST, message))?;
+
+    Ok(Some(SessionStartResponse {
+        root: active.root,
+        profile_id: active.profile_id,
+        profile_weight: active.profile_weight,
+        stack_weight: active.stack_weight,
+        spot: active.spot,
+        pot_type: active.pot_type,
+        oop_position: active.oop_position.clone(),
+        ip_position: active.ip_position.clone(),
+        board: board_from_game(&game),
+        starting_pot: game.tree_config().starting_pot,
+        effective_stack: game.tree_config().effective_stack,
+        hero_position: req.hero_position.clone(),
+        villain_position: if villain_player_index == 0 {
+            active.oop_position
+        } else {
+            active.ip_position
+        },
+        hero_player: player_name(hero_player_index).to_string(),
+        villain_player: player_name(villain_player_index).to_string(),
+        hero_hand,
+        villain_hand,
+        path: active.path,
+    }))
 }
 
 fn build_session_from_job(
@@ -359,14 +431,27 @@ fn build_session_from_job(
     let starting_pot = game.tree_config().starting_pot;
     let effective_stack = game.tree_config().effective_stack;
     let game_ranges = game.card_config().range;
+    let root_display = display_path(root);
+    let path_display = display_path(&selected.path);
 
     *state.game_state.lock().unwrap() = game;
     let mut ranges = state.range_state.lock().unwrap();
     ranges.0[0] = game_ranges[0];
     ranges.0[1] = game_ranges[1];
+    *state.active_training_session.lock().unwrap() = Some(ActiveTrainingSession {
+        root: root_display.clone(),
+        profile_id: selected.job.profile_id.clone(),
+        profile_weight: selected.job.profile_weight,
+        stack_weight: selected.job.stack_weight,
+        spot: selected.job.spot.clone(),
+        pot_type: selected.job.pot_type.clone(),
+        oop_position: selected.job.oop_position.clone(),
+        ip_position: selected.job.ip_position.clone(),
+        path: path_display.clone(),
+    });
 
     Ok(SessionStartResponse {
-        root: display_path(root),
+        root: root_display,
         profile_id: selected.job.profile_id.clone(),
         profile_weight: selected.job.profile_weight,
         stack_weight: selected.job.stack_weight,
@@ -387,7 +472,7 @@ fn build_session_from_job(
         villain_player: player_name(villain_player_index).to_string(),
         hero_hand,
         villain_hand,
-        path: display_path(&selected.path),
+        path: path_display,
     })
 }
 
@@ -1635,6 +1720,69 @@ mod tests {
         assert_ne!(replayed.villain_hand.packed, response.villain_hand.packed);
         for hero_card in replayed.hero_hand.cards {
             assert!(!replayed.villain_hand.cards.contains(&hero_card));
+        }
+    }
+
+    #[test]
+    fn session_replay_can_resample_from_active_game_without_reloading_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let profile = profile("smoke_replay_active_game");
+        let ranges = ranges_with("KK,QQ", "AA");
+        let flop = [0, 4, 8];
+        let mut job =
+            JobManifestEntry::planned(&profile, &first_stack(&profile), Some(&ranges), flop, root);
+        execute_job(&profile, &ranges, flop, &mut job, true).unwrap();
+        let manifest = manifest_with_jobs(root, vec![job]);
+        write_manifest(root, &manifest);
+
+        let state = Arc::new(SharedAppState::single_user());
+        let response = start_session_from_request(
+            state.clone(),
+            SessionStartRequest {
+                root: Some(root.to_str().unwrap().to_string()),
+                hero_position: "BTN".to_string(),
+                pot_types: Some(vec!["2bp".to_string()]),
+                profile_ids: None,
+            },
+        )
+        .unwrap();
+        std::fs::remove_file(&response.path).unwrap();
+
+        let same_hero = replay_session_from_request(
+            state.clone(),
+            SessionReplayRequest {
+                root: Some(root.to_str().unwrap().to_string()),
+                hero_position: response.hero_position.clone(),
+                path: response.path.clone(),
+                hero_hand: Some(response.hero_hand.clone()),
+                villain_hand: Some(response.villain_hand.clone()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(same_hero.path, response.path);
+        assert_eq!(same_hero.hero_hand.packed, response.hero_hand.packed);
+        assert_ne!(same_hero.villain_hand.packed, response.villain_hand.packed);
+        for hero_card in same_hero.hero_hand.cards {
+            assert!(!same_hero.villain_hand.cards.contains(&hero_card));
+        }
+
+        let new_cards = replay_session_from_request(
+            state,
+            SessionReplayRequest {
+                root: Some(root.to_str().unwrap().to_string()),
+                hero_position: response.hero_position.clone(),
+                path: response.path.clone(),
+                hero_hand: None,
+                villain_hand: None,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(new_cards.path, response.path);
+        for hero_card in new_cards.hero_hand.cards {
+            assert!(!new_cards.villain_hand.cards.contains(&hero_card));
         }
     }
 

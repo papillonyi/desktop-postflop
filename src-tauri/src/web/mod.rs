@@ -22,7 +22,7 @@ mod system;
 pub mod training;
 pub mod tree;
 
-pub use app_state::SharedAppState;
+pub use app_state::{ActiveTrainingSession, SharedAppState};
 
 pub fn app_with_state(state: SharedAppState) -> Router {
     let dist_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../dist");

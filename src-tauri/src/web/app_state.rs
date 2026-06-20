@@ -14,8 +14,22 @@ pub struct SharedAppState {
     pub tree_state: Mutex<ActionTree>,
     pub bunching_state: Mutex<Option<BunchingData>>,
     pub game_state: Mutex<PostFlopGame>,
+    pub active_training_session: Mutex<Option<ActiveTrainingSession>>,
     pub pool_state: Mutex<rayon::ThreadPool>,
     pub server_metrics: ServerMetrics,
+}
+
+#[derive(Clone)]
+pub struct ActiveTrainingSession {
+    pub root: String,
+    pub profile_id: String,
+    pub profile_weight: u32,
+    pub stack_weight: u32,
+    pub spot: String,
+    pub pot_type: String,
+    pub oop_position: String,
+    pub ip_position: String,
+    pub path: String,
 }
 
 impl SharedAppState {
@@ -25,6 +39,7 @@ impl SharedAppState {
             tree_state: Mutex::new(default_action_tree()),
             bunching_state: Mutex::new(None),
             game_state: Mutex::new(PostFlopGame::default()),
+            active_training_session: Mutex::new(None),
             pool_state: Mutex::new(
                 ThreadPoolBuilder::new()
                     .num_threads(default_thread_count())
