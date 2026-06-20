@@ -1204,31 +1204,33 @@ export function TrainingPage() {
               showRates={false}
             />
 
-            <div className="flex min-w-0 flex-col gap-3 sm:gap-4">
-              <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-stretch">
-                {renderActionPanel()}
-                <SessionBoardInfoCard
-                  heroHand={heroHand}
-                  session={session}
-                  terminal={terminal}
-                  villainHand={villainHand}
-                />
+            <div className="grid grid-cols-1 gap-3 sm:gap-4 xl:grid-cols-2 xl:items-start">
+              <div className="flex min-w-0 flex-col gap-3 sm:gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-stretch">
+                  {renderActionPanel()}
+                  <SessionBoardInfoCard
+                    heroHand={heroHand}
+                    session={session}
+                    terminal={terminal}
+                    villainHand={villainHand}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-stretch xl:grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_24rem]">
+                  <VillainActionRangePanel
+                    activeCellKey={activeVillainRangeCellKey}
+                    onHoverCell={setHoveredVillainRangeCellKey}
+                    review={latestVillainRangeReview ?? null}
+                  />
+                  <VillainRangeDetailCard
+                    cell={activeVillainRangeCell}
+                    isHovering={Boolean(hoveredVillainRangeCell)}
+                    review={latestVillainRangeReview ?? null}
+                  />
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-stretch xl:grid-cols-[minmax(0,1fr)_24rem]">
-                <VillainActionRangePanel
-                  activeCellKey={activeVillainRangeCellKey}
-                  onHoverCell={setHoveredVillainRangeCellKey}
-                  review={latestVillainRangeReview ?? null}
-                />
-                <VillainRangeDetailCard
-                  cell={activeVillainRangeCell}
-                  isHovering={Boolean(hoveredVillainRangeCell)}
-                  review={latestVillainRangeReview ?? null}
-                />
-              </div>
-
-              <section className="rounded border border-gray-300 bg-white p-3 sm:p-4">
+              <section className="rounded border border-gray-300 bg-white p-3 sm:p-4 xl:sticky xl:top-3 xl:max-h-[calc(100vh_-_8rem)] xl:overflow-auto">
                 <div className="text-sm font-semibold uppercase text-gray-500">
                   Decision Log
                 </div>
@@ -1237,7 +1239,7 @@ export function TrainingPage() {
                     No decisions yet.
                   </div>
                 ) : (
-                  <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                  <div className="mt-4 grid grid-cols-1 gap-3 2xl:grid-cols-2">
                     {displayDecisionLog.map(
                       ({ decision, actorDecisionNumber }) => {
                         const hideVillainPrivateDetails =
