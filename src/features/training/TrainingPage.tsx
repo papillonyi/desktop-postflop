@@ -3,7 +3,6 @@ import {
   ArrowPathIcon,
   ChartBarIcon,
   PlayIcon,
-  ForwardIcon,
   UserIcon,
 } from "@heroicons/react/24/solid";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -592,16 +591,6 @@ export function TrainingPage() {
   const isHeroTurn =
     Boolean(session && currentSpot?.player === session.heroPlayer) &&
     !navigatorUpdate?.selectedChance;
-  const actionStatus = terminal
-    ? "Hand complete"
-    : isHeroTurn && currentSpot
-    ? "Choose your action"
-    : navigatorUpdate?.selectedChance
-    ? "Dealing"
-    : currentSpot
-    ? `${currentSpot.player.toUpperCase()} acting`
-    : "Loading";
-
   const reloadLibrary = async () => {
     setLoadingLibrary(true);
     try {
@@ -859,8 +848,17 @@ export function TrainingPage() {
   };
 
   const handleNavigatorAction = (spot: SpotPlayer, actionIndex: number) => {
-    if (!session || spot.player !== session.heroPlayer) return false;
-    void chooseHeroAction(spot, actionIndex);
+    if (
+      !session ||
+      !currentSpot ||
+      !isHeroTurn ||
+      spot.index !== currentSpot.index ||
+      actionIndex < 0 ||
+      actionIndex >= currentSpot.actions.length
+    ) {
+      return false;
+    }
+    void chooseHeroAction(currentSpot, actionIndex);
     return false;
   };
 
@@ -981,91 +979,42 @@ export function TrainingPage() {
     >
       <div>
         <div className="text-sm font-semibold uppercase text-gray-500">
-          Action
+          Replay
         </div>
-        <div className="mt-1 text-lg font-semibold">{actionStatus}</div>
       </div>
-      {terminal ? (
-        <button
-          className="button-base button-blue training-mobile-button mt-4 flex w-full items-center justify-center gap-2"
-          disabled={startingSession}
-          onClick={startSession}
-          type="button"
-        >
-          <ForwardIcon className="h-5 w-5" />
-          Next Hand
-        </button>
-      ) : isHeroTurn && currentSpot ? (
-        <div className="mt-4 flex flex-col gap-2">
-          {currentSpot.actions.map((action) => (
-            <button
-              className="button-base button-blue training-mobile-button flex items-center justify-center"
-              key={action.index}
-              onClick={() => chooseHeroAction(currentSpot, action.index)}
-              type="button"
-            >
-              <span>{actionLabel(action)}</span>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <div className="mt-4 text-sm font-semibold text-gray-500">
-          {navigatorUpdate?.selectedChance
-            ? "Dealing"
-            : currentSpot
-            ? `${currentSpot.player.toUpperCase()} acting`
-            : "Loading"}
-        </div>
-      )}
       {session && (
-        <div className="mt-4 border-t border-gray-200 pt-4">
-          <div className="text-xs font-semibold uppercase text-gray-500">
-            Replay
-          </div>
-          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1">
-            <button
-              className="button-base button-gray training-mobile-button flex items-center justify-center gap-2"
-              disabled={replayingSession}
-              onClick={replaySameHand}
-              type="button"
-            >
-              <ArrowPathIcon className="h-5 w-5" />
-              Same Hand
-            </button>
-            <button
-              className="button-base button-gray training-mobile-button flex items-center justify-center gap-2"
-              disabled={replayingSession}
-              onClick={replaySameHero}
-              type="button"
-            >
-              <UserIcon className="h-5 w-5" />
-              Same Hero
-            </button>
-            <button
-              className="button-base button-gray training-mobile-button flex items-center justify-center gap-2"
-              disabled={replayingSession}
-              onClick={replayNewHand}
-              type="button"
-            >
-              <PlayIcon className="h-5 w-5" />
-              New Cards
-            </button>
-            {terminal && (
-              <button
-                className="button-base button-gray training-mobile-button flex items-center justify-center gap-2 sm:col-span-3 lg:col-span-1"
-                onClick={downloadTrainingHistory}
-                type="button"
-              >
-                <ArrowDownTrayIcon className="h-5 w-5" />
-                Download History
-              </button>
-            )}
-          </div>
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1">
+          <button
+            className="button-base button-gray training-mobile-button flex items-center justify-center gap-2"
+            disabled={replayingSession}
+            onClick={replaySameHand}
+            type="button"
+          >
+            <ArrowPathIcon className="h-5 w-5" />
+            Same Hand
+          </button>
+          <button
+            className="button-base button-gray training-mobile-button flex items-center justify-center gap-2"
+            disabled={replayingSession}
+            onClick={replaySameHero}
+            type="button"
+          >
+            <UserIcon className="h-5 w-5" />
+            Same Hero
+          </button>
+          <button
+            className="button-base button-gray training-mobile-button flex items-center justify-center gap-2"
+            disabled={replayingSession}
+            onClick={replayNewHand}
+            type="button"
+          >
+            <PlayIcon className="h-5 w-5" />
+            New Cards
+          </button>
         </div>
       )}
     </div>
   );
-
   const trainingTabs = (
     <div className="border-b border-gray-300 bg-white px-3 pt-3 sm:px-4">
       <div className="grid grid-cols-2 gap-2 sm:flex">
@@ -1231,8 +1180,20 @@ export function TrainingPage() {
               </div>
 
               <section className="rounded border border-gray-300 bg-white p-3 sm:p-4 xl:sticky xl:top-3 xl:max-h-[calc(100vh_-_8rem)] xl:overflow-auto">
-                <div className="text-sm font-semibold uppercase text-gray-500">
-                  Decision Log
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-sm font-semibold uppercase text-gray-500">
+                    Decision Log
+                  </div>
+                  {terminal && (
+                    <button
+                      className="button-base button-gray flex items-center justify-center gap-2 px-3 py-2 text-sm"
+                      onClick={downloadTrainingHistory}
+                      type="button"
+                    >
+                      <ArrowDownTrayIcon className="h-5 w-5" />
+                      Download History
+                    </button>
+                  )}
                 </div>
                 {visibleDecisionLog.length === 0 ? (
                   <div className="mt-4 text-sm text-gray-500">

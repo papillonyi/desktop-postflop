@@ -800,10 +800,10 @@ export const ResultNavigator = forwardRef<
                     key={action.index}
                     onClick={(event) => {
                       event.stopPropagation();
-                      if (readOnly) return;
                       if (onActionClick?.(spot, action.index) === false) {
                         return;
                       }
+                      if (readOnly) return;
                       play(spot.index, action.index);
                     }}
                     type="button"
