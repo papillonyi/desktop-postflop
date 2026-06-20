@@ -27,6 +27,20 @@ export type VillainActionRangeSummary = {
   totalWeight: number;
 };
 
+export function villainRangeCellKey(
+  cell: Pick<VillainActionRangeCell, "col" | "row">
+) {
+  return `${cell.row}:${cell.col}`;
+}
+
+export function findVillainRangeCell(
+  range: VillainActionRangeSummary | null | undefined,
+  key: string | null | undefined
+) {
+  if (!range || !key) return null;
+  return range.cells.find((cell) => villainRangeCellKey(cell) === key) ?? null;
+}
+
 const ranks = ["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"];
 const suitLetters = ["c", "d", "h", "s"];
 

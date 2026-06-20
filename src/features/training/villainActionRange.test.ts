@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildVillainActionRange } from "./villainActionRange.js";
+import {
+  buildVillainActionRange,
+  findVillainRangeCell,
+  villainRangeCellKey,
+} from "./villainActionRange.js";
 
 const pack = (card1: number, card2: number) => card1 | (card2 << 8);
 const card = (rank: number, suit: number) => rank * 4 + suit;
@@ -91,4 +95,28 @@ test("buildVillainActionRange returns an empty summary when action has no range 
   assert.deepEqual(range.cells, []);
   assert.equal("rows" in range, false);
   assert.equal("topCombos" in range, false);
+});
+
+test("villain range cell helpers resolve a hovered matrix cell", () => {
+  const acQc = pack(card(12, 0), card(10, 0));
+  const adQd = pack(card(12, 1), card(10, 1));
+
+  const range = buildVillainActionRange({
+    actionIndex: 0,
+    cards: [[acQc, adQd], []],
+    player: "oop",
+    results: {
+      normalizer: [[1, 1], []],
+      strategy: [0.5, 0.25],
+      weights: [[1, 1], []],
+    },
+  });
+
+  const cell = range.cells[0];
+  const key = villainRangeCellKey(cell);
+
+  assert.equal(key, "0:2");
+  assert.equal(findVillainRangeCell(range, key), cell);
+  assert.equal(findVillainRangeCell(range, "12:12"), null);
+  assert.equal(findVillainRangeCell(range, null), null);
 });

@@ -38,6 +38,9 @@ import {
 } from "./trainingHistoryExport";
 import {
   buildVillainActionRange,
+  findVillainRangeCell,
+  villainRangeCellKey,
+  type VillainActionRangeCell,
   type VillainActionRangeSummary,
 } from "./villainActionRange";
 
@@ -183,16 +186,175 @@ function matrixHandClass(row: number, col: number) {
   return `${rangeRanks[col]}${rangeRanks[row]}o`;
 }
 
-function VillainActionRangePanel({
+function comboCardList(cards: [number, number]) {
+  return (
+    <span className="flex items-center gap-1">
+      {cards.map((card) => {
+        const text = cardText(card);
+        return (
+          <span className={text.colorClass} key={card}>
+            {text.rank}
+            {text.suit}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+function SessionBoardInfoCard({
+  heroHand,
+  session,
+  terminal,
+  villainHand,
+}: {
+  heroHand: number[];
+  session: TrainingSession;
+  terminal: boolean;
+  villainHand: number[];
+}) {
+  return (
+    <div className="h-full rounded border border-gray-300 bg-white p-3 sm:p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div>
+          <div className="text-sm font-semibold text-gray-500">Board info</div>
+          <div className="mt-1 text-lg font-semibold">
+            {session.potType.toUpperCase()} · {session.spot}
+          </div>
+          <div className="mt-1 text-sm font-semibold text-gray-600">
+            {session.heroPosition} vs {session.villainPosition}
+          </div>
+        </div>
+        <div className="text-sm text-gray-600 sm:text-right">
+          <div>Stack {session.effectiveStack}</div>
+          <div>Stack weight {session.stackWeight}</div>
+        </div>
+      </div>
+      <div className="mt-4">
+        <div className="mb-1 text-xs font-semibold uppercase text-gray-500">
+          Board
+        </div>
+        {cardList(session.board)}
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-5">
+        <div>
+          <div className="mb-1 text-xs font-semibold uppercase text-gray-500">
+            Hero
+          </div>
+          {cardList(heroHand)}
+        </div>
+        <div>
+          <div className="mb-1 text-xs font-semibold uppercase text-gray-500">
+            Villain
+          </div>
+          {terminal ? (
+            cardList(villainHand)
+          ) : (
+            <div className="flex h-14 w-[5.25rem] items-center justify-center rounded border border-gray-300 bg-gray-100 text-sm font-semibold text-gray-500">
+              Hidden
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VillainRangeDetailCard({
+  cell,
+  isHovering,
   review,
 }: {
+  cell: VillainActionRangeCell | null;
+  isHovering: boolean;
+  review: DecisionReview | null;
+}) {
+  const range = review?.villainActionRange;
+  const hasRangeCells = Boolean(range?.cells.length);
+
+  return (
+    <div className="flex h-full min-h-[14rem] flex-col rounded border border-gray-300 bg-white p-3 sm:p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-gray-500">
+            Villain range detail
+          </div>
+          <div className="mt-1 text-lg font-semibold">
+            {range && cell
+              ? cell.handClass
+              : range
+              ? hasRangeCells
+                ? "Point to a hand"
+                : "No range combos"
+              : "No villain action yet"}
+          </div>
+          {review && range && (
+            <div className="mt-1 text-sm font-semibold text-gray-600">
+              {isHovering ? "Pointed hand class" : "Top hand class"} · after{" "}
+              {review.actionLabel}
+            </div>
+          )}
+        </div>
+        {range && cell && (
+          <div className="text-right text-sm text-gray-600">
+            <div>{formatRangeWeight(cell.weight)} weighted</div>
+            <div>{cell.comboCount} combos</div>
+          </div>
+        )}
+      </div>
+
+      {!range ? (
+        <div className="mt-4 text-sm font-semibold text-gray-500">
+          Villain suit pairs will appear here after villain acts.
+        </div>
+      ) : !hasRangeCells ? (
+        <div className="mt-4 text-sm font-semibold text-gray-500">
+          No villain range combos are available for this action.
+        </div>
+      ) : !cell ? (
+        <div className="mt-4 text-sm font-semibold text-gray-500">
+          Move the mouse over a highlighted hand in the villain range matrix.
+        </div>
+      ) : (
+        <div className="mt-4 min-h-0 flex-1 overflow-auto">
+          <div className="text-xs font-semibold uppercase text-gray-500">
+            Possible suit pairs
+          </div>
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+            {cell.combos.map((combo) => (
+              <div
+                className="flex items-center justify-between gap-3 rounded border border-gray-200 bg-gray-50 px-2 py-1.5 text-sm"
+                key={combo.label}
+              >
+                <span className="font-semibold">
+                  {comboCardList(combo.cards)}
+                </span>
+                <span className="text-gray-600">
+                  {formatRangeWeight(combo.weight)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VillainActionRangePanel({
+  activeCellKey,
+  onHoverCell,
+  review,
+}: {
+  activeCellKey: string | null;
+  onHoverCell: (key: string | null) => void;
   review: DecisionReview | null;
 }) {
   const range = review?.villainActionRange;
 
   if (!review || !range) {
     return (
-      <div className="rounded border border-gray-300 bg-white xl:max-w-[40rem]">
+      <div className="rounded border border-gray-300 bg-white">
         <div className="border-b border-gray-200 px-3 py-3 sm:px-4">
           <div className="text-sm font-semibold text-gray-500">
             Villain range
@@ -206,12 +368,12 @@ function VillainActionRangePanel({
   }
 
   const cellMap = new Map(
-    range.cells.map((cell) => [`${cell.row}:${cell.col}`, cell])
+    range.cells.map((cell) => [villainRangeCellKey(cell), cell])
   );
   const maxCellWeight = Math.max(0, ...range.cells.map((cell) => cell.weight));
 
   return (
-    <div className="rounded border border-gray-300 bg-white xl:max-w-[40rem]">
+    <div className="rounded border border-gray-300 bg-white">
       <div className="flex flex-col gap-2 border-b border-gray-200 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-4">
         <div>
           <div className="text-sm font-semibold text-gray-500">
@@ -233,17 +395,22 @@ function VillainActionRangePanel({
       ) : (
         <div className="overflow-auto p-3 sm:p-4">
           <div className="aspect-square min-w-[22rem] max-w-[34rem]">
-            <table className="snug h-full w-full table-fixed select-none">
+            <table
+              className="snug h-full w-full table-fixed select-none"
+              onMouseLeave={() => onHoverCell(null)}
+            >
               <tbody>
                 {rangeRanks.map((_, row) => (
                   <tr key={row}>
                     {rangeRanks.map((__, col) => {
-                      const cell = cellMap.get(`${row}:${col}`);
+                      const key = `${row}:${col}`;
+                      const cell = cellMap.get(key);
                       const height =
                         cell && maxCellWeight > 0
                           ? cell.weight / maxCellWeight
                           : 0;
                       const label = matrixHandClass(row, col);
+                      const isActive = activeCellKey === key;
                       const cellTitle = cell
                         ? [
                             `${label}: ${formatRangeWeight(
@@ -259,8 +426,16 @@ function VillainActionRangePanel({
                         : label;
                       return (
                         <td
-                          className="group relative border border-black outline-none hover:z-30 focus:z-30"
+                          className={[
+                            "relative border border-black outline-none transition",
+                            cell ? "cursor-pointer hover:z-30 focus:z-30" : "",
+                            isActive
+                              ? "z-20 ring-2 ring-blue-500 ring-inset"
+                              : "",
+                          ].join(" ")}
                           key={`${row}-${col}`}
+                          onFocus={() => onHoverCell(cell ? key : null)}
+                          onMouseEnter={() => onHoverCell(cell ? key : null)}
                           tabIndex={cell ? 0 : undefined}
                           title={cellTitle}
                         >
@@ -298,28 +473,6 @@ function VillainActionRangePanel({
                           >
                             {cell ? formatRangeWeight(cell.weight) : ""}
                           </div>
-                          {cell && cell.combos.length > 0 && (
-                            <div className="pointer-events-none absolute left-1 top-full z-30 mt-1 hidden min-w-[13rem] rounded border border-gray-700 bg-white p-2 text-gray-900 shadow-lg group-hover:block group-focus:block">
-                              <div className="text-xs font-semibold">
-                                {label} possible combos
-                              </div>
-                              <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-[0.68rem] leading-tight">
-                                {cell.combos.map((combo) => (
-                                  <div
-                                    className="flex items-center justify-between gap-2"
-                                    key={combo.label}
-                                  >
-                                    <span className="font-semibold">
-                                      {combo.label}
-                                    </span>
-                                    <span className="text-gray-600">
-                                      {formatRangeWeight(combo.weight)}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
                         </td>
                       );
                     })}
@@ -396,6 +549,9 @@ export function TrainingPage() {
   const [loadingLibrary, setLoadingLibrary] = useState(false);
   const [startingSession, setStartingSession] = useState(false);
   const [replayingSession, setReplayingSession] = useState(false);
+  const [hoveredVillainRangeCellKey, setHoveredVillainRangeCellKey] = useState<
+    string | null
+  >(null);
 
   const terminal = navigatorUpdate?.selectedSpot?.type === "terminal";
   const visibleDecisionLog = [...decisionLog, ...villainDecisionLog].sort(
@@ -406,14 +562,26 @@ export function TrainingPage() {
       hero: 0,
       villain: 0,
     };
-    return visibleDecisionLog.map((decision) => ({
-      decision,
-      actorDecisionNumber: ++counts[decision.actor],
-    }));
+    return visibleDecisionLog
+      .map((decision) => ({
+        decision,
+        actorDecisionNumber: ++counts[decision.actor],
+      }))
+      .reverse();
   })();
   const latestVillainRangeReview = [...villainDecisionLog]
     .reverse()
     .find((decision) => decision.villainActionRange);
+  const latestVillainRange = latestVillainRangeReview?.villainActionRange;
+  const hoveredVillainRangeCell = findVillainRangeCell(
+    latestVillainRange,
+    hoveredVillainRangeCellKey
+  );
+  const activeVillainRangeCell =
+    hoveredVillainRangeCell ?? latestVillainRange?.cells[0] ?? null;
+  const activeVillainRangeCellKey = activeVillainRangeCell
+    ? villainRangeCellKey(activeVillainRangeCell)
+    : null;
   const heroHand = session?.heroHand.cards ?? [];
   const villainHand = session?.villainHand.cards ?? [];
   const livePot = navigatorUpdate?.selectedSpot?.pot ?? session?.startingPot;
@@ -733,6 +901,10 @@ export function TrainingPage() {
   }, [terminal]);
 
   useEffect(() => {
+    setHoveredVillainRangeCellKey(null);
+  }, [latestVillainRangeReview?.order]);
+
+  useEffect(() => {
     if (!session || !navigatorUpdate || automationInFlightRef.current) return;
 
     const runAutomation = async () => {
@@ -1032,55 +1204,31 @@ export function TrainingPage() {
               showRates={false}
             />
 
-            <div className="grid grid-cols-1 gap-3 sm:gap-4 xl:grid-cols-[minmax(0,1fr)_24rem] xl:items-start">
-              <div className="flex min-w-0 flex-col gap-3 sm:gap-4">
-                <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start">
-                  {renderActionPanel()}
+            <div className="flex min-w-0 flex-col gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-stretch">
+                {renderActionPanel()}
+                <SessionBoardInfoCard
+                  heroHand={heroHand}
+                  session={session}
+                  terminal={terminal}
+                  villainHand={villainHand}
+                />
+              </div>
 
-                  <div className="rounded border border-gray-300 bg-white p-3 sm:p-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                      <div>
-                        <div className="text-sm font-semibold text-gray-500">
-                          {session.potType.toUpperCase()} · {session.spot}
-                        </div>
-                        <div className="mt-1 text-xl font-semibold">
-                          {session.heroPosition} vs {session.villainPosition}
-                        </div>
-                      </div>
-                      <div className="text-sm text-gray-600 sm:text-right">
-                        <div>Stack {session.effectiveStack}</div>
-                        <div>Stack weight {session.stackWeight}</div>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex flex-wrap items-center gap-5">
-                      <div>
-                        <div className="mb-1 text-xs font-semibold uppercase text-gray-500">
-                          Hero
-                        </div>
-                        {cardList(heroHand)}
-                      </div>
-                      <div>
-                        <div className="mb-1 text-xs font-semibold uppercase text-gray-500">
-                          Villain
-                        </div>
-                        {terminal ? (
-                          cardList(villainHand)
-                        ) : (
-                          <div className="flex h-14 w-[5.25rem] items-center justify-center rounded border border-gray-300 bg-gray-100 text-sm font-semibold text-gray-500">
-                            Hidden
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
+              <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-stretch xl:grid-cols-[minmax(0,1fr)_24rem]">
                 <VillainActionRangePanel
+                  activeCellKey={activeVillainRangeCellKey}
+                  onHoverCell={setHoveredVillainRangeCellKey}
+                  review={latestVillainRangeReview ?? null}
+                />
+                <VillainRangeDetailCard
+                  cell={activeVillainRangeCell}
+                  isHovering={Boolean(hoveredVillainRangeCell)}
                   review={latestVillainRangeReview ?? null}
                 />
               </div>
 
-              <section className="rounded border border-gray-300 bg-white p-3 sm:p-4 xl:sticky xl:top-3 xl:max-h-[calc(100vh_-_8rem)] xl:overflow-auto">
+              <section className="rounded border border-gray-300 bg-white p-3 sm:p-4">
                 <div className="text-sm font-semibold uppercase text-gray-500">
                   Decision Log
                 </div>
@@ -1089,7 +1237,7 @@ export function TrainingPage() {
                     No decisions yet.
                   </div>
                 ) : (
-                  <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-1">
+                  <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
                     {displayDecisionLog.map(
                       ({ decision, actorDecisionNumber }) => {
                         const hideVillainPrivateDetails =
