@@ -181,9 +181,9 @@ export function PreflopTrainingPanel() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-gray-50">
-      <div className="border-b border-gray-300 bg-white px-4 py-3">
+      <div className="border-b border-gray-300 bg-white px-3 py-3 sm:px-4">
         <div className="flex flex-wrap items-end gap-3">
-          <label className="flex flex-col text-sm font-semibold">
+          <label className="flex min-w-[5rem] flex-1 flex-col text-sm font-semibold sm:flex-none">
             <span>Hero</span>
             <select
               className="mt-1 rounded border-gray-300 text-sm"
@@ -200,7 +200,7 @@ export function PreflopTrainingPanel() {
             </select>
           </label>
           <button
-            className="button-base button-blue flex items-center gap-2"
+            className="button-base button-blue flex min-h-11 w-full items-center justify-center gap-2 sm:w-auto"
             disabled={startingDecision}
             onClick={startDecision}
             type="button"
@@ -209,7 +209,7 @@ export function PreflopTrainingPanel() {
             New Decision
           </button>
           <button
-            className="button-base button-blue flex items-center gap-2"
+            className="button-base button-blue flex min-h-11 w-full items-center justify-center gap-2 sm:w-auto"
             disabled={loadingSummary}
             onClick={reloadSummary}
             type="button"
@@ -225,7 +225,7 @@ export function PreflopTrainingPanel() {
             <span>
               {heroPosition}: {summary.heroDecisionCounts[heroPosition] ?? 0}
             </span>
-            <span>{summary.root}</span>
+            <span className="break-all">{summary.root}</span>
           </div>
         )}
         {error && (
@@ -233,11 +233,11 @@ export function PreflopTrainingPanel() {
         )}
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_22rem] gap-4 p-4">
-        <main className="min-h-0 overflow-auto rounded border border-gray-300 bg-white p-4">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 sm:gap-4 sm:p-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:overflow-hidden">
+        <main className="min-h-0 rounded border border-gray-300 bg-white p-3 sm:p-4 lg:overflow-auto">
           {decision ? (
             <div className="flex flex-col gap-5">
-              <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                 <div>
                   <div className="text-sm font-semibold text-gray-500">
                     {decision.nodePath}
@@ -246,7 +246,7 @@ export function PreflopTrainingPanel() {
                     {decision.heroPosition} {decision.handClass}
                   </div>
                 </div>
-                <div className="text-right text-sm text-gray-600">
+                <div className="text-sm text-gray-600 sm:text-right">
                   <div>{formatCards(decision.handCards)}</div>
                   <div>{cardList(decision.handCards)}</div>
                 </div>
@@ -292,11 +292,11 @@ export function PreflopTrainingPanel() {
                 <div className="mb-2 text-xs font-semibold uppercase text-gray-500">
                   Actions
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
                   {decision.actions.map((action) => (
                     <button
                       className={[
-                        "button-base flex min-w-[7rem] items-center justify-center",
+                        "button-base flex min-h-11 items-center justify-center sm:min-w-[7rem]",
                         selectedAction === action.action
                           ? "button-green"
                           : "button-blue",
@@ -325,14 +325,14 @@ export function PreflopTrainingPanel() {
                     {decision.actions.map((action) => (
                       <div
                         className={[
-                          "grid grid-cols-[7rem_minmax(0,1fr)_5rem] items-center gap-3 px-4 py-2 text-sm",
+                          "grid grid-cols-[6rem_minmax(0,1fr)_4.5rem] items-center gap-2 px-3 py-2 text-sm sm:grid-cols-[7rem_minmax(0,1fr)_5rem] sm:gap-3 sm:px-4",
                           selectedAction === action.action
                             ? "bg-blue-50 font-semibold"
                             : "",
                         ].join(" ")}
                         key={action.action}
                       >
-                        <span>
+                        <span className="min-w-0 truncate">
                           {formatAction(action.action)}
                           {action.inferred && (
                             <span className="ml-1 text-xs font-semibold text-amber-700">
@@ -370,7 +370,7 @@ export function PreflopTrainingPanel() {
           )}
         </main>
 
-        <aside className="min-h-0 overflow-auto rounded border border-gray-300 bg-white p-4">
+        <aside className="min-h-0 rounded border border-gray-300 bg-white p-3 sm:p-4 lg:overflow-auto">
           <div className="text-sm font-semibold uppercase text-gray-500">
             Range Notes
           </div>

@@ -154,7 +154,7 @@ function cardList(cards: number[]) {
 function ActionReview({ review }: { review: DecisionReview | null }) {
   if (!review) {
     return (
-      <div className="rounded border border-gray-300 bg-white p-4 text-sm font-semibold text-gray-500">
+      <div className="rounded border border-gray-300 bg-white p-3 text-sm font-semibold text-gray-500 sm:p-4">
         Choose an action to reveal this hand's GTO frequencies.
       </div>
     );
@@ -162,7 +162,7 @@ function ActionReview({ review }: { review: DecisionReview | null }) {
 
   return (
     <div className="rounded border border-gray-300 bg-white">
-      <div className="border-b border-gray-200 px-4 py-3">
+      <div className="border-b border-gray-200 px-3 py-3 sm:px-4">
         <div className="text-sm font-semibold text-gray-500">
           {review.position} {formatHand(review.handCards)} on{" "}
           {formatBoard(review.board)}
@@ -173,12 +173,12 @@ function ActionReview({ review }: { review: DecisionReview | null }) {
         {review.actions.map((action) => (
           <div
             className={[
-              "grid grid-cols-[1fr_5rem_5rem] items-center gap-3 px-4 py-2 text-sm",
+              "grid grid-cols-[minmax(0,1fr)_4.5rem_4.5rem] items-center gap-2 px-3 py-2 text-sm sm:grid-cols-[1fr_5rem_5rem] sm:gap-3 sm:px-4",
               action.isChosen ? "bg-blue-50 font-semibold" : "",
             ].join(" ")}
             key={action.actionIndex}
           >
-            <span>{actionLabel(action)}</span>
+            <span className="truncate">{actionLabel(action)}</span>
             <span className="text-right">
               {formatProbability(action.probability)}
             </span>
@@ -257,9 +257,7 @@ export function TrainingPage() {
 
   const terminal = navigatorUpdate?.selectedSpot?.type === "terminal";
   const visibleDecisionLog = showVillainDecisionLog
-    ? [...decisionLog, ...villainDecisionLog].sort(
-        (a, b) => a.order - b.order
-      )
+    ? [...decisionLog, ...villainDecisionLog].sort((a, b) => a.order - b.order)
     : decisionLog;
   const displayDecisionLog = (() => {
     const counts: Record<DecisionReview["actor"], number> = {
@@ -637,13 +635,106 @@ export function TrainingPage() {
     }, 120);
   }, [buildReview, cards, navigatorUpdate, session]);
 
+  const renderActionPanel = (className = "") => (
+    <div
+      className={[
+        "rounded border border-gray-300 bg-white p-3 sm:p-4",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <div className="text-sm font-semibold uppercase text-gray-500">
+        Action
+      </div>
+      {terminal ? (
+        <button
+          className="button-base button-blue mt-4 flex w-full items-center justify-center gap-2"
+          disabled={startingSession}
+          onClick={startSession}
+          type="button"
+        >
+          <ForwardIcon className="h-5 w-5" />
+          Next Hand
+        </button>
+      ) : isHeroTurn && currentSpot ? (
+        <div className="mt-4 flex flex-col gap-2">
+          {currentSpot.actions.map((action) => (
+            <button
+              className="button-base button-blue flex min-h-11 items-center justify-center"
+              key={action.index}
+              onClick={() => chooseHeroAction(currentSpot, action.index)}
+              type="button"
+            >
+              <span>{actionLabel(action)}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-4 text-sm font-semibold text-gray-500">
+          {navigatorUpdate?.selectedChance
+            ? "Dealing"
+            : currentSpot
+            ? `${currentSpot.player.toUpperCase()} acting`
+            : "Loading"}
+        </div>
+      )}
+      {session && (
+        <div className="mt-4 border-t border-gray-200 pt-4">
+          <div className="text-xs font-semibold uppercase text-gray-500">
+            Replay
+          </div>
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1">
+            <button
+              className="button-base button-gray flex min-h-11 items-center justify-center gap-2"
+              disabled={replayingSession}
+              onClick={replaySameHand}
+              type="button"
+            >
+              <ArrowPathIcon className="h-5 w-5" />
+              Same Hand
+            </button>
+            <button
+              className="button-base button-gray flex min-h-11 items-center justify-center gap-2"
+              disabled={replayingSession}
+              onClick={replaySameHero}
+              type="button"
+            >
+              <UserIcon className="h-5 w-5" />
+              Same Hero
+            </button>
+            <button
+              className="button-base button-gray flex min-h-11 items-center justify-center gap-2"
+              disabled={replayingSession}
+              onClick={replayNewHand}
+              type="button"
+            >
+              <PlayIcon className="h-5 w-5" />
+              New Cards
+            </button>
+            {terminal && (
+              <button
+                className="button-base button-gray flex min-h-11 items-center justify-center gap-2 sm:col-span-3 lg:col-span-1"
+                onClick={downloadTrainingHistory}
+                type="button"
+              >
+                <ArrowDownTrayIcon className="h-5 w-5" />
+                Download History
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   const trainingTabs = (
-    <div className="border-b border-gray-300 bg-white px-4 pt-3">
-      <div className="flex gap-2">
+    <div className="border-b border-gray-300 bg-white px-3 pt-3 sm:px-4">
+      <div className="grid grid-cols-2 gap-2 sm:flex">
         {(["postflop", "preflop"] as const).map((mode) => (
           <button
             className={[
-              "rounded-t border border-b-0 px-4 py-2 text-sm font-semibold",
+              "rounded-t border border-b-0 px-3 py-2 text-sm font-semibold sm:px-4",
               trainingMode === mode
                 ? "border-gray-300 bg-gray-50 text-blue-700"
                 : "border-transparent bg-white text-gray-600 hover:bg-gray-100",
@@ -671,9 +762,9 @@ export function TrainingPage() {
   return (
     <div className="flex h-full min-h-0 flex-col bg-gray-50">
       {trainingTabs}
-      <div className="border-b border-gray-300 bg-white px-4 py-3">
+      <div className="border-b border-gray-300 bg-white px-3 py-3 sm:px-4">
         <div className="flex flex-wrap items-end gap-3">
-          <label className="flex min-w-[18rem] flex-1 flex-col text-sm font-semibold">
+          <label className="flex min-w-0 basis-full flex-col text-sm font-semibold sm:min-w-[18rem] sm:flex-1">
             <span>Library</span>
             <input
               className="mt-1 rounded border-gray-300 text-sm"
@@ -682,7 +773,7 @@ export function TrainingPage() {
             />
           </label>
           <button
-            className="button-base button-gray flex items-center gap-2"
+            className="button-base button-gray flex min-h-11 w-full items-center justify-center gap-2 sm:w-auto"
             disabled={loadingLibrary}
             onClick={reloadLibrary}
             type="button"
@@ -690,7 +781,7 @@ export function TrainingPage() {
             <ArrowPathIcon className="h-5 w-5" />
             Reload
           </button>
-          <label className="flex flex-col text-sm font-semibold">
+          <label className="flex min-w-[5rem] flex-1 flex-col text-sm font-semibold sm:flex-none">
             <span>Hero</span>
             <select
               className="mt-1 rounded border-gray-300 text-sm"
@@ -706,10 +797,10 @@ export function TrainingPage() {
               ))}
             </select>
           </label>
-          <div className="flex items-center gap-2">
+          <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:items-center">
             {potTypes.map((potType) => (
               <label
-                className="flex items-center gap-1 rounded border border-gray-300 px-3 py-2 text-sm font-semibold"
+                className="flex min-h-11 items-center justify-center gap-1 rounded border border-gray-300 px-3 py-2 text-sm font-semibold"
                 key={potType}
               >
                 <input
@@ -722,7 +813,7 @@ export function TrainingPage() {
             ))}
           </div>
           <button
-            className="button-base button-blue flex items-center gap-2"
+            className="button-base button-blue flex min-h-11 w-full items-center justify-center gap-2 sm:w-auto"
             disabled={startingSession || enabledPotTypes.length === 0}
             onClick={startSession}
             type="button"
@@ -732,7 +823,7 @@ export function TrainingPage() {
           </button>
           {session && (
             <button
-              className="button-base button-gray flex items-center gap-2"
+              className="button-base button-gray flex min-h-11 w-full items-center justify-center gap-2 sm:w-auto"
               onClick={viewResults}
               type="button"
             >
@@ -746,7 +837,7 @@ export function TrainingPage() {
             <span>{summary.solvedJobCount} solved jobs</span>
             <span>{summary.manifest.jobCount} manifest jobs</span>
             <span>{summary.validationErrors.length} validation errors</span>
-            <span>{summary.root}</span>
+            <span className="break-all">{summary.root}</span>
           </div>
         )}
         {error && (
@@ -754,7 +845,7 @@ export function TrainingPage() {
         )}
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_23rem]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_23rem] lg:overflow-hidden">
         <div className="flex min-h-0 flex-col">
           {session && cards[0]?.length > 0 ? (
             <>
@@ -774,10 +865,10 @@ export function TrainingPage() {
                 ref={navigatorRef}
                 showRates={false}
               />
-              <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_18rem] gap-4 p-4">
+              <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 sm:gap-4 sm:p-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
                 <div className="flex min-h-0 flex-col gap-4">
-                  <div className="rounded border border-gray-300 bg-white p-4">
-                    <div className="flex items-start justify-between gap-4">
+                  <div className="rounded border border-gray-300 bg-white p-3 sm:p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                       <div>
                         <div className="text-sm font-semibold text-gray-500">
                           {session.potType.toUpperCase()} · {session.spot}
@@ -786,7 +877,7 @@ export function TrainingPage() {
                           {session.heroPosition} vs {session.villainPosition}
                         </div>
                       </div>
-                      <div className="text-right text-sm text-gray-600">
+                      <div className="text-sm text-gray-600 sm:text-right">
                         <div>Pot {livePot ?? session.startingPot}</div>
                         <div>Stack {session.effectiveStack}</div>
                         <div>Stack weight {session.stackWeight}</div>
@@ -822,104 +913,21 @@ export function TrainingPage() {
                     </div>
                   </div>
 
+                  {renderActionPanel("lg:hidden")}
                   <ActionReview review={lastReview} />
                 </div>
 
-                <div className="rounded border border-gray-300 bg-white p-4">
-                  <div className="text-sm font-semibold uppercase text-gray-500">
-                    Action
-                  </div>
-                  {terminal ? (
-                    <button
-                      className="button-base button-blue mt-4 flex w-full items-center justify-center gap-2"
-                      disabled={startingSession}
-                      onClick={startSession}
-                      type="button"
-                    >
-                      <ForwardIcon className="h-5 w-5" />
-                      Next Hand
-                    </button>
-                  ) : isHeroTurn && currentSpot ? (
-                    <div className="mt-4 flex flex-col gap-2">
-                      {currentSpot.actions.map((action) => (
-                        <button
-                          className="button-base button-blue flex items-center justify-center"
-                          key={action.index}
-                          onClick={() =>
-                            chooseHeroAction(currentSpot, action.index)
-                          }
-                          type="button"
-                        >
-                          <span>{actionLabel(action)}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="mt-4 text-sm font-semibold text-gray-500">
-                      {navigatorUpdate?.selectedChance
-                        ? "Dealing"
-                        : currentSpot
-                        ? `${currentSpot.player.toUpperCase()} acting`
-                        : "Loading"}
-                    </div>
-                  )}
-                  {session && (
-                    <div className="mt-4 border-t border-gray-200 pt-4">
-                      <div className="text-xs font-semibold uppercase text-gray-500">
-                        Replay
-                      </div>
-                      <div className="mt-2 flex flex-col gap-2">
-                        <button
-                          className="button-base button-gray flex items-center justify-center gap-2"
-                          disabled={replayingSession}
-                          onClick={replaySameHand}
-                          type="button"
-                        >
-                          <ArrowPathIcon className="h-5 w-5" />
-                          Same Hand
-                        </button>
-                        <button
-                          className="button-base button-gray flex items-center justify-center gap-2"
-                          disabled={replayingSession}
-                          onClick={replaySameHero}
-                          type="button"
-                        >
-                          <UserIcon className="h-5 w-5" />
-                          Same Hero
-                        </button>
-                        <button
-                          className="button-base button-gray flex items-center justify-center gap-2"
-                          disabled={replayingSession}
-                          onClick={replayNewHand}
-                          type="button"
-                        >
-                          <PlayIcon className="h-5 w-5" />
-                          New Cards
-                        </button>
-                        {terminal && (
-                          <button
-                            className="button-base button-gray flex items-center justify-center gap-2"
-                            onClick={downloadTrainingHistory}
-                            type="button"
-                          >
-                            <ArrowDownTrayIcon className="h-5 w-5" />
-                            Download History
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                {renderActionPanel("hidden lg:block")}
               </div>
             </>
           ) : (
-            <div className="flex h-full items-center justify-center text-gray-500">
+            <div className="flex min-h-[18rem] flex-1 items-center justify-center px-4 text-center text-gray-500 lg:h-full">
               Start a new hand from a solved training library.
             </div>
           )}
         </div>
 
-        <aside className="min-h-0 overflow-auto border-l border-gray-300 bg-white p-4">
+        <aside className="min-h-0 border-t border-gray-300 bg-white p-3 sm:p-4 lg:overflow-auto lg:border-l lg:border-t-0">
           <div className="text-sm font-semibold uppercase text-gray-500">
             Decision Log
           </div>
