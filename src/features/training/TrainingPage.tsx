@@ -1034,7 +1034,7 @@ export function TrainingPage() {
 
             <div className="grid grid-cols-1 gap-3 sm:gap-4 xl:grid-cols-[minmax(0,1fr)_24rem] xl:items-start">
               <div className="flex min-w-0 flex-col gap-3 sm:gap-4">
-                <div className="flex flex-col gap-3 sm:gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start">
                   {renderActionPanel()}
 
                   <div className="rounded border border-gray-300 bg-white p-3 sm:p-4">
