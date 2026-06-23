@@ -100,6 +100,8 @@ pub fn app_with_state(state: SharedAppState) -> Router {
         )
         .route("/api/preflop/summary", get(preflop::summary))
         .route("/api/preflop/decision/start", post(preflop::decision_start))
+        .route("/api/preflop/drill/start", post(preflop::drill_start))
+        .route("/api/preflop/drill/act", post(preflop::drill_act))
         .fallback_service(static_files)
         .layer(middleware::from_fn_with_state(
             state.clone(),

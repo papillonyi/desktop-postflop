@@ -690,12 +690,25 @@ export type PreflopActionHistoryItem = {
   action: string;
   range: string | null;
   rangeSource: "direct" | "derived" | "missing";
+  reachRange?: string | null;
 };
 
 export type PreflopActionFrequency = {
   action: string;
   frequency: number;
   inferred: boolean;
+};
+
+export type PreflopDrillAction = PreflopActionFrequency & {
+  range: string | null;
+  rangeSource: "direct" | "derived" | "missing";
+};
+
+export type PreflopDrillNode = {
+  actor: PreflopPosition;
+  nodePath: string;
+  reachRange: string | null;
+  actions: PreflopDrillAction[];
 };
 
 export type PreflopDecision = {
@@ -709,6 +722,20 @@ export type PreflopDecision = {
   notes: string[];
 };
 
+export type PreflopDrillStart = {
+  root: string;
+  history: PreflopActionHistoryItem[];
+  node: PreflopDrillNode;
+  terminal: boolean;
+  notes: string[];
+};
+
+export type PreflopDrillAdvance = {
+  selectedAction: PreflopActionHistoryItem;
+  node: PreflopDrillNode | null;
+  terminal: boolean;
+};
+
 export const preflopSummary = async (): Promise<PreflopSummary> => {
   return await apiGet<PreflopSummary>("/preflop/summary");
 };
@@ -717,4 +744,15 @@ export const preflopDecisionStart = async (req: {
   heroPosition: PreflopPosition;
 }): Promise<PreflopDecision> => {
   return await apiPost<PreflopDecision>("/preflop/decision/start", req);
+};
+
+export const preflopDrillStart = async (): Promise<PreflopDrillStart> => {
+  return await apiPost<PreflopDrillStart>("/preflop/drill/start");
+};
+
+export const preflopDrillAct = async (req: {
+  nodePath: string;
+  action: string;
+}): Promise<PreflopDrillAdvance> => {
+  return await apiPost<PreflopDrillAdvance>("/preflop/drill/act", req);
 };

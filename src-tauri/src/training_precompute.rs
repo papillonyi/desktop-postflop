@@ -9,7 +9,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use postflop_solver::{
     compute_exploitability, finalize, load_data_from_file, save_data_to_file, solve_step,
     ActionTree, BetSize, BetSizeOptions, BoardState, CardConfig, DonkSizeOptions, PostFlopGame,
-    TreeConfig, NOT_DEALT,
+    Range, TreeConfig, NOT_DEALT,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,6 +21,7 @@ pub struct CliOptions {
     pub limit: Option<usize>,
     pub overwrite: bool,
     pub dry_run: bool,
+    pub resume: bool,
 }
 
 impl CliOptions {
@@ -43,6 +44,7 @@ impl CliOptions {
         let mut limit = None;
         let mut overwrite = false;
         let mut dry_run = false;
+        let mut resume = false;
 
         while let Some(arg) = args.next() {
             let arg = arg
@@ -74,6 +76,7 @@ impl CliOptions {
                 }
                 "--overwrite" => overwrite = true,
                 "--dry-run" => dry_run = true,
+                "--resume" => resume = true,
                 other => return Err(format!("unknown argument: {other}")),
             }
         }
@@ -100,6 +103,7 @@ impl CliOptions {
             limit,
             overwrite,
             dry_run,
+            resume,
         })
     }
 }
@@ -562,11 +566,28 @@ pub fn load_profile_ranges(
             ip_path.display()
         ));
     }
+    validate_loaded_profile_range(profile, "oopRangePath", &oop_path, &oop_range)?;
+    validate_loaded_profile_range(profile, "ipRangePath", &ip_path, &ip_range)?;
 
     Ok(LoadedProfileRanges {
         range_fingerprint: range_fingerprint(&oop_range, &ip_range),
         oop_range,
         ip_range,
+    })
+}
+
+fn validate_loaded_profile_range(
+    profile: &TrainingProfile,
+    label: &str,
+    path: &Path,
+    range_text: &str,
+) -> Result<(), String> {
+    range_text.parse::<Range>().map(|_| ()).map_err(|err| {
+        format!(
+            "invalid {label} for {} ({}): {err}",
+            profile.id,
+            path.display()
+        )
     })
 }
 
@@ -1150,6 +1171,46 @@ fn execute_job_with_progress<W: IoWrite>(
     Ok(())
 }
 
+fn verify_existing_job_file(
+    job: &mut JobManifestEntry,
+    flop: [u8; 3],
+    path: &Path,
+) -> Result<(), String> {
+    let start = Instant::now();
+    let (loaded, _memo): (PostFlopGame, _) = load_data_from_file(path, None)
+        .map_err(|err| format!("failed to verify existing file {}: {err}", path.display()))?;
+    if loaded.card_config().flop != flop {
+        return Err(format!(
+            "existing file {} has unexpected flop: expected {} got {}",
+            path.display(),
+            flop_to_string(flop),
+            flop_to_string(loaded.card_config().flop)
+        ));
+    }
+    if loaded.tree_config().starting_pot != job.starting_pot {
+        return Err(format!(
+            "existing file {} has unexpected starting pot: expected {} got {}",
+            path.display(),
+            job.starting_pot,
+            loaded.tree_config().starting_pot
+        ));
+    }
+    if loaded.tree_config().effective_stack != job.effective_stack {
+        return Err(format!(
+            "existing file {} has unexpected effective stack: expected {} got {}",
+            path.display(),
+            job.effective_stack,
+            loaded.tree_config().effective_stack
+        ));
+    }
+
+    job.status = JobStatus::SkippedExisting;
+    job.path = Some(path.to_path_buf());
+    job.duration_ms = Some(start.elapsed().as_millis());
+    job.error = None;
+    Ok(())
+}
+
 struct SolveReport {
     iterations_completed: u32,
     final_exploitability: f32,
@@ -1292,6 +1353,21 @@ fn run_cli_with_writer<W: IoWrite>(opts: CliOptions, progress: &mut W) -> Result
         overwrite: opts.overwrite,
         dry_run: opts.dry_run,
     };
+
+    if opts.resume {
+        let mut manifest = load_manifest(&opts.output_dir)?;
+        manifest.output_dir = opts.output_dir.clone();
+        manifest.config_path = Some(opts.config_path.clone());
+        run_resume_manifest(
+            &config,
+            &opts.config_path,
+            &mut manifest,
+            run_options.dry_run,
+            progress,
+        )?;
+        return Ok(());
+    }
+
     let mut manifest = build_job_plan(&config, &opts.config_path, &opts.output_dir, &run_options)?;
     manifest.config_path = Some(opts.config_path.clone());
     write_manifest(&manifest)?;
@@ -1418,6 +1494,176 @@ fn run_cli_with_writer<W: IoWrite>(opts: CliOptions, progress: &mut W) -> Result
     }
 
     Ok(())
+}
+
+fn load_manifest(output_dir: &Path) -> Result<Manifest, String> {
+    let manifest_path = output_dir.join("manifest.json");
+    let raw = std::fs::read_to_string(&manifest_path)
+        .map_err(|err| format!("failed to read manifest {}: {err}", manifest_path.display()))?;
+    serde_json::from_str(&raw).map_err(|err| {
+        format!(
+            "failed to parse manifest {}: {err}",
+            manifest_path.display()
+        )
+    })
+}
+
+fn run_resume_manifest<W: IoWrite>(
+    config: &TrainingConfig,
+    config_path: &Path,
+    manifest: &mut Manifest,
+    dry_run: bool,
+    progress: &mut W,
+) -> Result<(), String> {
+    validate_config(config)?;
+    validate_resume_manifest(config, config_path, manifest)?;
+    write_plan_progress(progress, manifest, dry_run)?;
+
+    if dry_run {
+        return Ok(());
+    }
+
+    let output_dir = manifest.output_dir.clone();
+    let planned_total = manifest
+        .jobs
+        .iter()
+        .filter(|job| job.status == JobStatus::Planned)
+        .count();
+    let mut completed = 0usize;
+
+    for index in 0..manifest.jobs.len() {
+        if manifest.jobs[index].status != JobStatus::Planned {
+            continue;
+        }
+
+        let profile_id = manifest.jobs[index].profile_id.clone();
+        let profile = config
+            .profiles
+            .iter()
+            .find(|profile| profile.id == profile_id)
+            .ok_or_else(|| format!("profile not found: {profile_id}"))?;
+        let ranges = load_profile_ranges(config_path, profile)?;
+        let flop = flop_from_string(&manifest.jobs[index].flop)?;
+        let path = manifest_job_path(&output_dir, &manifest.jobs[index])?;
+        manifest.jobs[index].path = Some(path.clone());
+
+        if path.exists() {
+            write_job_progress(
+                progress,
+                completed,
+                planned_total,
+                "verifying_existing",
+                &manifest.jobs[index],
+            )?;
+            let result = verify_existing_job_file(&mut manifest.jobs[index], flop, &path);
+            if let Err(err) = result {
+                let verification_error = err;
+                write_job_progress(
+                    progress,
+                    completed,
+                    planned_total,
+                    "regenerating_existing",
+                    &manifest.jobs[index],
+                )?;
+                let result = {
+                    let job = &mut manifest.jobs[index];
+                    execute_job_with_progress(profile, &ranges, flop, job, true, progress)
+                };
+                if let Err(err) = result {
+                    manifest.jobs[index].status = JobStatus::Failed;
+                    manifest.jobs[index].error = Some(format!(
+                        "existing file verification failed: {verification_error}; regeneration failed: {err}"
+                    ));
+                }
+            }
+        } else {
+            write_job_progress(
+                progress,
+                completed,
+                planned_total,
+                "solving",
+                &manifest.jobs[index],
+            )?;
+            let result = {
+                let job = &mut manifest.jobs[index];
+                execute_job_with_progress(profile, &ranges, flop, job, false, progress)
+            };
+            if let Err(err) = result {
+                manifest.jobs[index].status = JobStatus::Failed;
+                manifest.jobs[index].error = Some(err);
+            }
+        }
+
+        write_manifest(manifest)?;
+        completed += 1;
+        write_job_progress(
+            progress,
+            completed,
+            planned_total,
+            job_status_label(manifest.jobs[index].status),
+            &manifest.jobs[index],
+        )?;
+    }
+
+    Ok(())
+}
+
+fn validate_resume_manifest(
+    config: &TrainingConfig,
+    config_path: &Path,
+    manifest: &Manifest,
+) -> Result<(), String> {
+    for job in manifest.jobs.iter().filter(|job| {
+        !matches!(job.status, JobStatus::MissingRange | JobStatus::Failed)
+    }) {
+        let profile = config
+            .profiles
+            .iter()
+            .find(|profile| profile.id == job.profile_id)
+            .ok_or_else(|| format!("profile not found for resume job: {}", job.profile_id))?;
+        let ranges = load_profile_ranges(config_path, profile)?;
+        validate_resume_job_fingerprint(job, profile, &ranges)?;
+        flop_from_string(&job.flop)?;
+        manifest_job_path(&manifest.output_dir, job)?;
+    }
+    Ok(())
+}
+
+fn validate_resume_job_fingerprint(
+    job: &JobManifestEntry,
+    profile: &TrainingProfile,
+    ranges: &LoadedProfileRanges,
+) -> Result<(), String> {
+    if job.range_fingerprint != ranges.range_fingerprint {
+        return Err(format!(
+            "range fingerprint mismatch for {} flop={}: manifest={} config={}",
+            job.profile_id, job.flop, job.range_fingerprint, ranges.range_fingerprint
+        ));
+    }
+
+    let expected_profile_fingerprint =
+        profile_fingerprint(profile, job.effective_stack, &ranges.range_fingerprint);
+    if job.profile_fingerprint != expected_profile_fingerprint {
+        return Err(format!(
+            "profile fingerprint mismatch for {} flop={}: manifest={} config={}",
+            job.profile_id, job.flop, job.profile_fingerprint, expected_profile_fingerprint
+        ));
+    }
+
+    Ok(())
+}
+
+fn manifest_job_path(output_dir: &Path, job: &JobManifestEntry) -> Result<PathBuf, String> {
+    if let Some(path) = &job.path {
+        return Ok(path.clone());
+    }
+    if let Some(relative_path) = &job.output_relative_path {
+        return Ok(output_dir.join(relative_path));
+    }
+    Err(format!(
+        "resume job has no output path: {} flop={}",
+        job.profile_id, job.flop
+    ))
 }
 
 fn write_plan_progress<W: IoWrite>(
@@ -1704,6 +1950,17 @@ mod tests {
         }
     }
 
+    fn resume_profile(id: &str) -> TrainingProfile {
+        TrainingProfile {
+            tree_config: Some(dev_profile_tree_config()),
+            flop_count: 5,
+            target_exploitability: 10_000.0,
+            max_iterations: 1,
+            enable_compression: false,
+            ..runnable_profile(id)
+        }
+    }
+
     fn smoke_ranges() -> LoadedProfileRanges {
         LoadedProfileRanges {
             oop_range: "AA".to_string(),
@@ -1716,11 +1973,74 @@ mod tests {
         profile.stack_variants_for_plan()[0].clone()
     }
 
+    fn write_resume_config(
+        dir: &Path,
+        profile: &TrainingProfile,
+        oop_range: &str,
+        ip_range: &str,
+    ) -> PathBuf {
+        std::fs::write(dir.join("oop.txt"), oop_range).unwrap();
+        std::fs::write(dir.join("ip.txt"), ip_range).unwrap();
+        let config_path = dir.join("config.json");
+        std::fs::write(
+            &config_path,
+            serde_json::to_string(&TrainingConfig {
+                version: 1,
+                profiles: vec![profile.clone()],
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        config_path
+    }
+
+    fn resume_cli_options(config_path: &Path, output_dir: &Path, extra: &[&str]) -> CliOptions {
+        let mut args = vec![
+            "training-precompute".to_string(),
+            "--config".to_string(),
+            config_path.display().to_string(),
+            "--out".to_string(),
+            output_dir.display().to_string(),
+        ];
+        args.extend(extra.iter().map(|arg| arg.to_string()));
+        CliOptions::parse_from(args).unwrap()
+    }
+
+    fn write_single_job_manifest(output_dir: &Path, job: JobManifestEntry) {
+        write_manifest(&Manifest {
+            version: 1,
+            generated_at: "test".to_string(),
+            config_path: Some(PathBuf::from("/tmp/original-config.json")),
+            output_dir: output_dir.to_path_buf(),
+            jobs: vec![job],
+        })
+        .unwrap();
+    }
+
+    fn read_manifest(output_dir: &Path) -> Manifest {
+        serde_json::from_str(&std::fs::read_to_string(output_dir.join("manifest.json")).unwrap())
+            .unwrap()
+    }
+
     #[test]
     fn parse_cli_requires_config_and_out() {
         let err = CliOptions::parse_from(["training-precompute"]).unwrap_err();
         assert!(err.contains("--config"));
         assert!(err.contains("--out"));
+    }
+
+    #[test]
+    fn parse_cli_accepts_resume() {
+        let opts = CliOptions::parse_from([
+            "training-precompute",
+            "--config",
+            "config.json",
+            "--out",
+            "out",
+            "--resume",
+        ]);
+
+        assert!(opts.is_ok());
     }
 
     #[test]
@@ -1886,6 +2206,20 @@ mod tests {
 
         let err = load_profile_ranges(&config_path, &profile).unwrap_err();
         assert!(err.contains("oopRangePath"));
+        assert!(err.contains("p1"));
+    }
+
+    #[test]
+    fn load_profile_ranges_rejects_invalid_range_syntax() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config_path = tmp.path().join("config.json");
+        std::fs::write(tmp.path().join("oop.txt"), "not-a-hand").unwrap();
+        std::fs::write(tmp.path().join("ip.txt"), "KK").unwrap();
+        let profile = minimal_profile("p1");
+
+        let err = load_profile_ranges(&config_path, &profile).unwrap_err();
+
+        assert!(err.contains("invalid oopRangePath"));
         assert!(err.contains("p1"));
     }
 
@@ -2168,6 +2502,7 @@ mod tests {
             limit: Some(1),
             overwrite: false,
             dry_run: true,
+            resume: false,
         };
         let mut output = Vec::new();
         run_cli_with_writer(opts, &mut output).unwrap();
@@ -2214,6 +2549,7 @@ mod tests {
             limit: Some(1),
             overwrite: true,
             dry_run: false,
+            resume: false,
         };
         let mut output = Vec::new();
         run_cli_with_writer(opts, &mut output).unwrap();
@@ -2250,6 +2586,7 @@ mod tests {
             limit: Some(1),
             overwrite: true,
             dry_run: false,
+            resume: false,
         };
         let mut output = Vec::new();
         run_cli_with_writer(opts, &mut output).unwrap();
@@ -2266,6 +2603,184 @@ mod tests {
         assert!(output.contains("iteration=1/1 stage=start"));
         assert!(output.contains("stage=save elapsed_ms="));
         assert!(output.contains("output="));
+    }
+
+    #[test]
+    fn resume_dry_run_loads_existing_manifest_without_rebuilding_sampled_flops() {
+        let tmp = tempfile::tempdir().unwrap();
+        let profile = resume_profile("resume_no_rebuild");
+        let config_path = write_resume_config(tmp.path(), &profile, "AA", "KK");
+        let output_dir = tmp.path().join("out");
+        let ranges = load_profile_ranges(&config_path, &profile).unwrap();
+        let manifest_flop = [0, 4, 8];
+        let job = JobManifestEntry::planned(
+            &profile,
+            &first_stack(&profile),
+            Some(&ranges),
+            manifest_flop,
+            &output_dir,
+        );
+        write_single_job_manifest(&output_dir, job);
+
+        let opts = resume_cli_options(&config_path, &output_dir, &["--resume", "--dry-run"]);
+        let mut output = Vec::new();
+        run_cli_with_writer(opts, &mut output).unwrap();
+
+        let manifest = read_manifest(&output_dir);
+        assert_eq!(manifest.jobs.len(), 1);
+        assert_eq!(manifest.jobs[0].flop, flop_to_string(manifest_flop));
+        assert_eq!(manifest.jobs[0].status, JobStatus::Planned);
+    }
+
+    #[test]
+    fn resume_verifies_existing_planned_file_as_skipped_existing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let profile = resume_profile("resume_existing");
+        let config_path = write_resume_config(tmp.path(), &profile, "AA", "KK");
+        let output_dir = tmp.path().join("out");
+        let ranges = load_profile_ranges(&config_path, &profile).unwrap();
+        let manifest_flop = [0, 4, 8];
+        let mut job = JobManifestEntry::planned(
+            &profile,
+            &first_stack(&profile),
+            Some(&ranges),
+            manifest_flop,
+            &output_dir,
+        );
+        execute_job(&profile, &ranges, manifest_flop, &mut job, true).unwrap();
+        assert!(job.path.as_ref().unwrap().exists());
+        job.status = JobStatus::Planned;
+        job.iterations_completed = 0;
+        job.final_exploitability = None;
+        job.duration_ms = None;
+        job.error = Some("old error".to_string());
+        write_single_job_manifest(&output_dir, job);
+
+        let opts = resume_cli_options(&config_path, &output_dir, &["--resume"]);
+        let mut output = Vec::new();
+        run_cli_with_writer(opts, &mut output).unwrap();
+
+        let manifest = read_manifest(&output_dir);
+        assert_eq!(manifest.jobs.len(), 1);
+        assert_eq!(manifest.jobs[0].status, JobStatus::SkippedExisting);
+        assert!(manifest.jobs[0].error.is_none());
+    }
+
+    #[test]
+    fn resume_regenerates_unloadable_existing_planned_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let profile = resume_profile("resume_corrupt_existing");
+        let config_path = write_resume_config(tmp.path(), &profile, "AA", "KK");
+        let output_dir = tmp.path().join("out");
+        let ranges = load_profile_ranges(&config_path, &profile).unwrap();
+        let manifest_flop = [0, 4, 8];
+        let job = JobManifestEntry::planned(
+            &profile,
+            &first_stack(&profile),
+            Some(&ranges),
+            manifest_flop,
+            &output_dir,
+        );
+        let output_path = job.path.clone().unwrap();
+        std::fs::create_dir_all(output_path.parent().unwrap()).unwrap();
+        std::fs::write(&output_path, []).unwrap();
+        write_single_job_manifest(&output_dir, job);
+
+        let opts = resume_cli_options(&config_path, &output_dir, &["--resume"]);
+        let mut output = Vec::new();
+        run_cli_with_writer(opts, &mut output).unwrap();
+
+        let manifest = read_manifest(&output_dir);
+        assert_eq!(manifest.jobs.len(), 1);
+        assert_eq!(manifest.jobs[0].status, JobStatus::Solved);
+        assert!(std::fs::metadata(&output_path).unwrap().len() > 0);
+    }
+
+    #[test]
+    fn resume_solves_missing_planned_smoke_job_and_updates_manifest() {
+        let tmp = tempfile::tempdir().unwrap();
+        let profile = resume_profile("resume_missing");
+        let config_path = write_resume_config(tmp.path(), &profile, "AA", "KK");
+        let output_dir = tmp.path().join("out");
+        let ranges = load_profile_ranges(&config_path, &profile).unwrap();
+        let manifest_flop = [0, 4, 8];
+        let job = JobManifestEntry::planned(
+            &profile,
+            &first_stack(&profile),
+            Some(&ranges),
+            manifest_flop,
+            &output_dir,
+        );
+        let output_path = job.path.clone().unwrap();
+        write_single_job_manifest(&output_dir, job);
+        assert!(!output_path.exists());
+
+        let opts = resume_cli_options(&config_path, &output_dir, &["--resume"]);
+        let mut output = Vec::new();
+        run_cli_with_writer(opts, &mut output).unwrap();
+
+        let manifest = read_manifest(&output_dir);
+        assert!(output_path.exists());
+        assert_eq!(manifest.jobs.len(), 1);
+        assert_eq!(manifest.jobs[0].flop, flop_to_string(manifest_flop));
+        assert_eq!(manifest.jobs[0].status, JobStatus::Solved);
+    }
+
+    #[test]
+    fn resume_fingerprint_mismatch_fails_without_writing_solver_output() {
+        let tmp = tempfile::tempdir().unwrap();
+        let profile = resume_profile("resume_mismatch");
+        let config_path = write_resume_config(tmp.path(), &profile, "AA", "KK");
+        let output_dir = tmp.path().join("out");
+        let ranges = load_profile_ranges(&config_path, &profile).unwrap();
+        let manifest_flop = [0, 4, 8];
+        let job = JobManifestEntry::planned(
+            &profile,
+            &first_stack(&profile),
+            Some(&ranges),
+            manifest_flop,
+            &output_dir,
+        );
+        let output_path = job.path.clone().unwrap();
+        write_single_job_manifest(&output_dir, job);
+        std::fs::write(tmp.path().join("ip.txt"), "QQ").unwrap();
+
+        let opts = resume_cli_options(&config_path, &output_dir, &["--resume"]);
+        let mut output = Vec::new();
+        let err = run_cli_with_writer(opts, &mut output).unwrap_err();
+
+        assert!(err.contains("fingerprint"));
+        assert!(!output_path.exists());
+        let manifest = read_manifest(&output_dir);
+        assert_eq!(manifest.jobs[0].status, JobStatus::Planned);
+    }
+
+    #[test]
+    fn resume_dry_run_rejects_solved_fingerprint_mismatch() {
+        let tmp = tempfile::tempdir().unwrap();
+        let profile = resume_profile("resume_solved_mismatch");
+        let config_path = write_resume_config(tmp.path(), &profile, "AA", "KK");
+        let output_dir = tmp.path().join("out");
+        let ranges = load_profile_ranges(&config_path, &profile).unwrap();
+        let manifest_flop = [0, 4, 8];
+        let mut job = JobManifestEntry::planned(
+            &profile,
+            &first_stack(&profile),
+            Some(&ranges),
+            manifest_flop,
+            &output_dir,
+        );
+        job.status = JobStatus::Solved;
+        write_single_job_manifest(&output_dir, job);
+        std::fs::write(tmp.path().join("ip.txt"), "QQ").unwrap();
+
+        let opts = resume_cli_options(&config_path, &output_dir, &["--resume", "--dry-run"]);
+        let mut output = Vec::new();
+        let err = run_cli_with_writer(opts, &mut output).unwrap_err();
+
+        assert!(err.contains("fingerprint"));
+        let manifest = read_manifest(&output_dir);
+        assert_eq!(manifest.jobs[0].status, JobStatus::Solved);
     }
 
     #[test]

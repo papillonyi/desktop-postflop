@@ -1,18 +1,29 @@
 import { ArrowPathIcon, PlayIcon } from "@heroicons/react/24/solid";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import * as invokes from "../../invokes";
 import type {
-  PreflopActionFrequency,
-  PreflopDecision,
-  PreflopPosition,
+  PreflopActionHistoryItem,
+  PreflopDrillAction,
+  PreflopDrillNode,
   PreflopSummary,
 } from "../../invokes";
-import { BoardCard } from "../../shared/components/BoardCard";
-import { cardText, ranks, toFixed1 } from "../../utils";
+import { ranks, toFixed1 } from "../../utils";
+import {
+  buildRangePaneEntries,
+  buildPreflopTimelineEntries,
+  frequencyFillPercent,
+} from "./preflopTrainingUi";
 
-const positions: PreflopPosition[] = ["UTG", "MP", "CO", "BTN", "SB", "BB"];
 const displayRanks = [...ranks].reverse();
 const rankValues = new Map(ranks.map((rank, index) => [rank, index]));
+
+type PreflopDrillState = {
+  root: string;
+  history: PreflopActionHistoryItem[];
+  node: PreflopDrillNode | null;
+  terminal: boolean;
+  notes: string[];
+};
 
 function formatAction(action: string) {
   if (action === "AllIn") return "All-in";
@@ -21,32 +32,6 @@ function formatAction(action: string) {
 
 function formatPercent(value: number) {
   return `${toFixed1((Number.isFinite(value) ? value : 0) * 100)}%`;
-}
-
-function formatCards(cards: number[]) {
-  return cards
-    .map((card) => {
-      const text = cardText(card);
-      return `${text.rank}${text.suit}`;
-    })
-    .join(" ");
-}
-
-function cardList(cards: number[]) {
-  return (
-    <div className="flex gap-1">
-      {cards.map((card) => (
-        <BoardCard cardId={card} className="h-14 w-10" disabled key={card} />
-      ))}
-    </div>
-  );
-}
-
-function actionWeightClass(action: PreflopActionFrequency) {
-  if (action.frequency >= 0.67) return "bg-green-500";
-  if (action.frequency >= 0.34) return "bg-blue-500";
-  if (action.frequency > 0) return "bg-amber-500";
-  return "bg-gray-300";
 }
 
 function formatRangeSource(source: string) {
@@ -96,51 +81,257 @@ function cellHandClass(rowIndex: number, colIndex: number) {
     : `${colRank}${rowRank}o`;
 }
 
-function rangeCellClass(weight: number) {
-  if (weight >= 0.67) return "bg-green-500 text-white";
-  if (weight >= 0.34) return "bg-blue-500 text-white";
-  if (weight > 0) return "bg-amber-400 text-gray-950";
-  return "bg-gray-100 text-gray-400";
-}
-
-function RangeMatrix({ range }: { range: string }) {
+function RangeMatrix({
+  range,
+  reachRange,
+}: {
+  range: string;
+  reachRange?: string | null;
+}) {
   const weights = parseRangeWeights(range);
+  const reachWeights = reachRange ? parseRangeWeights(reachRange) : null;
 
   return (
-    <table className="mt-2 w-full table-fixed border-collapse text-[0.56rem] font-semibold leading-none">
-      <tbody>
-        {displayRanks.map((rank, rowIndex) => (
-          <tr key={rank}>
-            {displayRanks.map((_, colIndex) => {
-              const handClass = cellHandClass(rowIndex, colIndex);
-              const weight = weights.get(handClass) ?? 0;
-              return (
-                <td
+    <div className="overflow-x-auto">
+      <table className="table-fixed border-collapse text-[0.6rem] font-semibold leading-none sm:text-[0.56rem]">
+        <tbody>
+          {displayRanks.map((rank, rowIndex) => (
+            <tr key={rank}>
+              {displayRanks.map((_, colIndex) => {
+                const handClass = cellHandClass(rowIndex, colIndex);
+                const weight = weights.get(handClass) ?? 0;
+                const reachWeight = reachWeights?.get(handClass) ?? null;
+                const canReach = reachWeights
+                  ? (reachWeight ?? 0) > 0
+                  : true;
+                const displayWeight = canReach ? weight : 0;
+                const title = canReach
+                  ? `${handClass} ${formatPercent(displayWeight)}`
+                  : `${handClass} cannot reach this node`;
+
+                return (
+                  <td
+                    className={[
+                      "relative h-[1.55rem] w-[1.9rem] min-w-[1.9rem] overflow-hidden border border-gray-900 bg-white p-0 text-center align-middle text-gray-950 sm:h-[1.35rem] sm:w-[1.65rem] sm:min-w-[1.65rem]",
+                      canReach ? "" : "bg-gray-100 text-gray-400",
+                    ].join(" ")}
+                    key={handClass}
+                    title={title}
+                  >
+                    {canReach && displayWeight > 0 && (
+                      <span
+                        aria-hidden="true"
+                        className="absolute inset-x-0 bottom-0 bg-yellow-300"
+                        style={{ height: frequencyFillPercent(displayWeight) }}
+                      />
+                    )}
+                    <span className="relative z-10">{handClass}</span>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function RangePanel({
+  emptyText,
+  range,
+  rangeSource,
+  reachRange,
+  subtitle,
+  title,
+}: {
+  emptyText?: string;
+  range: string | null;
+  rangeSource: string;
+  reachRange?: string | null;
+  subtitle?: string;
+  title: string;
+}) {
+  return (
+    <section className="rounded border border-gray-300 bg-white p-2">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-sm font-semibold text-gray-950">{title}</div>
+          {subtitle && (
+            <div className="text-xs font-semibold text-gray-500">{subtitle}</div>
+          )}
+        </div>
+        <span className="text-xs font-semibold uppercase text-gray-500">
+          {formatRangeSource(rangeSource)}
+        </span>
+      </div>
+      {range ? (
+        <RangeMatrix range={range} reachRange={reachRange} />
+      ) : (
+        <div className="rounded border border-gray-200 bg-gray-50 px-3 py-4 text-sm font-semibold text-gray-500">
+          {emptyText ?? "No range file found for this branch."}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ActionChoices({
+  actions,
+  activeAction,
+  busy,
+  onChoose,
+  onPreview,
+  onPreviewEnd,
+}: {
+  actions: PreflopDrillAction[];
+  activeAction: string | null;
+  busy: boolean;
+  onChoose: (action: PreflopDrillAction) => void;
+  onPreview: (action: string) => void;
+  onPreviewEnd: (action: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5" role="radiogroup">
+      {actions.map((action) => {
+        const active = action.action === activeAction;
+        return (
+          <button
+            aria-checked={active}
+            className={[
+              "rounded border px-2.5 py-1 text-xs font-semibold transition-colors",
+              active
+                ? "border-blue-600 bg-blue-50 text-blue-800"
+                : "border-gray-300 bg-white text-gray-800 hover:border-blue-400",
+            ].join(" ")}
+            disabled={busy}
+            key={action.action}
+            onBlur={() => onPreviewEnd(action.action)}
+            onClick={() => onChoose(action)}
+            onFocus={() => onPreview(action.action)}
+            onMouseEnter={() => onPreview(action.action)}
+            onMouseLeave={() => onPreviewEnd(action.action)}
+            role="radio"
+            type="button"
+          >
+            <span>{formatAction(action.action)}</span>
+            <span className="ml-1 text-gray-500">
+              {formatPercent(action.frequency)}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function DrillTimeline({
+  activeAction,
+  busy,
+  currentNode,
+  history,
+  onChoose,
+  onPreview,
+  onPreviewEnd,
+  terminal,
+}: {
+  activeAction: string | null;
+  busy: boolean;
+  currentNode: PreflopDrillNode | null;
+  history: PreflopActionHistoryItem[];
+  onChoose: (action: PreflopDrillAction) => void;
+  onPreview: (action: string) => void;
+  onPreviewEnd: (action: string) => void;
+  terminal: boolean;
+}) {
+  const entries = buildPreflopTimelineEntries(
+    history,
+    currentNode?.actor ?? null,
+    terminal
+  );
+
+  if (entries.length === 0) {
+    return (
+      <div className="rounded border border-dashed border-gray-300 bg-gray-50 px-3 py-4 text-sm font-semibold text-gray-500">
+        Start a hand to begin at UTG.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded border border-gray-300 bg-white">
+      <div className="border-b border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600">
+        Preflop line
+      </div>
+      <div className="divide-y divide-gray-100">
+        {entries.map((entry, index) => {
+          const isLast = index === entries.length - 1;
+          const historyItem =
+            entry.kind === "history" ? history[entry.historyIndex] : null;
+
+          return (
+            <div
+              className="grid grid-cols-[5.8rem_1.25rem_minmax(0,1fr)] items-start gap-2 px-3 py-2 sm:grid-cols-[7rem_1.5rem_minmax(0,1fr)]"
+              key={entry.key}
+            >
+              <div className="text-right">
+                <div className="text-xs font-semibold text-gray-500">
+                  {entry.actor}
+                </div>
+                {entry.action && (
+                  <div className="mt-1 inline-flex rounded border border-gray-300 bg-gray-50 px-2 py-0.5 text-xs font-semibold text-gray-950">
+                    {formatAction(entry.action)}
+                  </div>
+                )}
+              </div>
+              <div className="flex h-full flex-col items-center">
+                <span
                   className={[
-                    "h-5 border border-white text-center align-middle",
-                    rangeCellClass(weight),
+                    "mt-1 h-2.5 w-2.5 rounded-full border",
+                    entry.active
+                      ? "border-blue-600 bg-blue-600"
+                      : "border-gray-400 bg-white",
                   ].join(" ")}
-                  key={handClass}
-                  title={`${handClass} ${formatPercent(weight)}`}
-                >
-                  {handClass}
-                </td>
-              );
-            })}
-          </tr>
-        ))}
-      </tbody>
-    </table>
+                />
+                {!isLast && <span className="mt-1 w-px flex-1 bg-gray-300" />}
+              </div>
+              <div className="min-w-0">
+                {entry.kind === "current" && currentNode ? (
+                  <ActionChoices
+                    actions={currentNode.actions}
+                    activeAction={activeAction}
+                    busy={busy}
+                    onChoose={onChoose}
+                    onPreview={onPreview}
+                    onPreviewEnd={onPreviewEnd}
+                  />
+                ) : entry.kind === "terminal" ? (
+                  <div className="text-sm font-semibold text-green-700">
+                    Preflop action complete
+                  </div>
+                ) : (
+                  <div className="text-xs font-semibold uppercase text-gray-500">
+                    {historyItem
+                      ? formatRangeSource(historyItem.rangeSource)
+                      : "action"}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
 export function PreflopTrainingPanel() {
   const [summary, setSummary] = useState<PreflopSummary | null>(null);
-  const [heroPosition, setHeroPosition] = useState<PreflopPosition>("BTN");
-  const [decision, setDecision] = useState<PreflopDecision | null>(null);
-  const [selectedAction, setSelectedAction] = useState("");
+  const [drill, setDrill] = useState<PreflopDrillState | null>(null);
+  const [previewActionName, setPreviewActionName] = useState("");
   const [loadingSummary, setLoadingSummary] = useState(false);
-  const [startingDecision, setStartingDecision] = useState(false);
+  const [startingDrill, setStartingDrill] = useState(false);
+  const [acting, setActing] = useState(false);
   const [error, setError] = useState("");
 
   const reloadSummary = async () => {
@@ -155,19 +346,44 @@ export function PreflopTrainingPanel() {
     }
   };
 
-  const startDecision = async () => {
-    setStartingDecision(true);
+  const startDrill = async () => {
+    setStartingDrill(true);
     try {
-      const nextDecision = await invokes.preflopDecisionStart({
-        heroPosition,
-      });
-      setDecision(nextDecision);
-      setSelectedAction("");
+      const nextDrill = await invokes.preflopDrillStart();
+      setDrill(nextDrill);
+      setPreviewActionName(nextDrill.node.actions[0]?.action ?? "");
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setStartingDecision(false);
+      setStartingDrill(false);
+    }
+  };
+
+  const chooseAction = async (action: PreflopDrillAction) => {
+    const currentNode = drill?.node;
+    if (!drill || !currentNode || acting) return;
+
+    const currentDrill = drill;
+    setActing(true);
+    try {
+      const advance = await invokes.preflopDrillAct({
+        nodePath: currentNode.nodePath,
+        action: action.action,
+      });
+      setDrill({
+        root: currentDrill.root,
+        history: [...currentDrill.history, advance.selectedAction],
+        node: advance.node,
+        terminal: advance.terminal,
+        notes: currentDrill.notes,
+      });
+      setPreviewActionName(advance.node?.actions[0]?.action ?? "");
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setActing(false);
     }
   };
 
@@ -177,39 +393,48 @@ export function PreflopTrainingPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const revealed = Boolean(decision && selectedAction);
+  const currentNode = drill?.node ?? null;
+  const previewAction =
+    currentNode?.actions.find((action) => action.action === previewActionName) ??
+    currentNode?.actions[0] ??
+    null;
+  const busy = startingDrill || acting;
+  const rangePaneEntries = useMemo(
+    () =>
+      buildRangePaneEntries(
+        currentNode && previewAction
+          ? {
+              actor: currentNode.actor,
+              action: formatAction(previewAction.action),
+              frequency: previewAction.frequency,
+              range: previewAction.range,
+              rangeSource: previewAction.rangeSource,
+              reachRange: currentNode.reachRange,
+            }
+          : null,
+        (drill?.history ?? []).map((item) => ({
+          ...item,
+          action: formatAction(item.action),
+        }))
+      ),
+    [currentNode, drill?.history, previewAction]
+  );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-gray-50">
-      <div className="border-b border-gray-300 bg-white px-3 py-3 sm:px-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="flex min-w-[5rem] flex-1 flex-col text-sm font-semibold sm:flex-none">
-            <span>Hero</span>
-            <select
-              className="mt-1 rounded border-gray-300 text-sm"
-              onChange={(event) =>
-                setHeroPosition(event.target.value as PreflopPosition)
-              }
-              value={heroPosition}
-            >
-              {positions.map((position) => (
-                <option key={position} value={position}>
-                  {position}
-                </option>
-              ))}
-            </select>
-          </label>
+    <div className="flex min-h-0 flex-1 flex-col bg-gray-100">
+      <div className="border-b border-gray-300 bg-white px-3 py-3">
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            className="button-base button-blue training-mobile-button flex w-full items-center justify-center gap-2 sm:w-auto"
-            disabled={startingDecision}
-            onClick={startDecision}
+            className="button-base button-blue inline-flex min-h-[2.5rem] items-center gap-2"
+            disabled={startingDrill}
+            onClick={startDrill}
             type="button"
           >
             <PlayIcon className="h-5 w-5" />
-            New Decision
+            New Hand
           </button>
           <button
-            className="button-base button-blue training-mobile-button flex w-full items-center justify-center gap-2 sm:w-auto"
+            className="button-base button-blue inline-flex min-h-[2.5rem] items-center gap-2"
             disabled={loadingSummary}
             onClick={reloadSummary}
             type="button"
@@ -217,181 +442,99 @@ export function PreflopTrainingPanel() {
             <ArrowPathIcon className="h-5 w-5" />
             Reload
           </button>
+          {summary && (
+            <div className="flex flex-wrap gap-3 text-xs font-semibold text-gray-500">
+              <span>{summary.decisionNodeCount} nodes</span>
+              <span>{summary.rangeFileCount} ranges</span>
+              <span>UTG starts {summary.heroDecisionCounts.UTG ?? 0}</span>
+              <span className="break-all">{summary.root}</span>
+            </div>
+          )}
         </div>
-        {summary && (
-          <div className="mt-3 flex flex-wrap gap-4 text-sm text-gray-600">
-            <span>{summary.decisionNodeCount} decision nodes</span>
-            <span>{summary.rangeFileCount} range files</span>
-            <span>
-              {heroPosition}: {summary.heroDecisionCounts[heroPosition] ?? 0}
-            </span>
-            <span className="break-all">{summary.root}</span>
-          </div>
-        )}
         {error && (
-          <div className="mt-3 text-sm font-semibold text-red-600">{error}</div>
+          <div className="mt-2 text-sm font-semibold text-red-600">{error}</div>
         )}
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 sm:gap-4 sm:p-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:overflow-hidden">
-        <main className="min-h-0 rounded border border-gray-300 bg-white p-3 sm:p-4 lg:overflow-auto">
-          {decision ? (
-            <div className="flex flex-col gap-5">
-              <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-                <div>
-                  <div className="text-sm font-semibold text-gray-500">
-                    {decision.nodePath}
-                  </div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {decision.heroPosition} {decision.handClass}
-                  </div>
-                </div>
-                <div className="text-sm text-gray-600 sm:text-right">
-                  <div>{formatCards(decision.handCards)}</div>
-                  <div>{cardList(decision.handCards)}</div>
-                </div>
-              </div>
+      <main className="min-h-0 flex-1 overflow-auto p-3">
+        <div className="mx-auto grid max-w-[1400px] gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start">
+          <div className="min-w-0">
+            <section className="rounded border border-gray-300 bg-white p-3">
+              <DrillTimeline
+                activeAction={previewAction?.action ?? null}
+                busy={busy}
+                currentNode={currentNode}
+                history={drill?.history ?? []}
+                onChoose={(action) => void chooseAction(action)}
+                onPreview={setPreviewActionName}
+                onPreviewEnd={(actionName) =>
+                  setPreviewActionName((current) =>
+                    current === actionName
+                      ? currentNode?.actions[0]?.action ?? ""
+                      : current
+                  )
+                }
+                terminal={drill?.terminal ?? false}
+              />
+            </section>
 
-              <div>
-                <div className="mb-2 text-xs font-semibold uppercase text-gray-500">
-                  Action History
-                </div>
-                {decision.history.length === 0 ? (
-                  <div className="text-sm font-semibold text-gray-500">
-                    First action
-                  </div>
-                ) : (
-                  <div className="grid gap-2">
-                    {decision.history.map((item, index) => (
-                      <div
-                        className="rounded border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
-                        key={`${item.actor}-${item.action}-${index}`}
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2 font-semibold">
-                          <span>
-                            {item.actor} {formatAction(item.action)}
-                          </span>
-                          <span className="text-xs uppercase text-gray-500">
-                            {formatRangeSource(item.rangeSource)}
-                          </span>
-                        </div>
-                        {item.range ? (
-                          <RangeMatrix range={item.range} />
-                        ) : (
-                          <div className="mt-2 text-xs font-semibold text-gray-500">
-                            No range file found for this branch.
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+            {!drill && (
+              <section className="mt-3 rounded border border-dashed border-gray-300 bg-white px-4 py-10 text-center text-sm font-semibold text-gray-500">
+                Start a new hand to drill preflop ranges from UTG.
+              </section>
+            )}
 
-              <div>
-                <div className="mb-2 text-xs font-semibold uppercase text-gray-500">
-                  Actions
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:gap-2">
-                  {decision.actions.map((action) => (
-                    <button
-                      className={[
-                        "button-base training-mobile-button flex items-center justify-center sm:min-w-[7rem]",
-                        selectedAction === action.action
-                          ? "button-green"
-                          : "button-blue",
-                      ].join(" ")}
-                      key={action.action}
-                      onClick={() => setSelectedAction(action.action)}
-                      type="button"
-                    >
-                      {formatAction(action.action)}
-                    </button>
-                  ))}
-                </div>
+            {drill && drill.notes.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-gray-500">
+                {drill.notes.map((note) => (
+                  <span
+                    className="rounded border border-gray-200 bg-white px-2 py-1"
+                    key={note}
+                  >
+                    {note}
+                  </span>
+                ))}
               </div>
+            )}
+          </div>
 
-              {revealed && (
-                <div className="rounded border border-gray-300">
-                  <div className="border-b border-gray-200 px-4 py-3">
-                    <div className="text-sm font-semibold text-gray-500">
-                      Selected
-                    </div>
-                    <div className="mt-1 text-lg font-semibold">
-                      {formatAction(selectedAction)}
-                    </div>
-                  </div>
-                  <div className="divide-y divide-gray-100">
-                    {decision.actions.map((action) => (
-                      <div
-                        className={[
-                          "grid grid-cols-[6rem_minmax(0,1fr)_4.5rem] items-center gap-2 px-3 py-2 text-sm sm:grid-cols-[7rem_minmax(0,1fr)_5rem] sm:gap-3 sm:px-4",
-                          selectedAction === action.action
-                            ? "bg-blue-50 font-semibold"
-                            : "",
-                        ].join(" ")}
-                        key={action.action}
-                      >
-                        <span className="min-w-0 truncate">
-                          {formatAction(action.action)}
-                          {action.inferred && (
-                            <span className="ml-1 text-xs font-semibold text-amber-700">
-                              inferred
-                            </span>
-                          )}
-                        </span>
-                        <div className="h-2 rounded bg-gray-100">
-                          <div
-                            className={[
-                              "h-2 rounded",
-                              actionWeightClass(action),
-                            ].join(" ")}
-                            style={{
-                              width: `${Math.max(
-                                0,
-                                Math.min(100, action.frequency * 100)
-                              )}%`,
-                            }}
-                          />
-                        </div>
-                        <span className="text-right">
-                          {formatPercent(action.frequency)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+          <div className="min-w-0 lg:max-h-[calc(100vh-8rem)] lg:overflow-auto">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="text-sm font-semibold text-gray-700">
+                Derived ranges
+              </div>
+              {rangePaneEntries.length > 0 && (
+                <div className="text-xs font-semibold text-gray-500">
+                  {rangePaneEntries.length} matrices
                 </div>
               )}
             </div>
-          ) : (
-            <div className="flex h-full min-h-[20rem] items-center justify-center text-gray-500">
-              No decision loaded.
-            </div>
-          )}
-        </main>
-
-        <aside className="min-h-0 rounded border border-gray-300 bg-white p-3 sm:p-4 lg:overflow-auto">
-          <div className="text-sm font-semibold uppercase text-gray-500">
-            Range Notes
+            {rangePaneEntries.length > 0 ? (
+              <div className="flex flex-col gap-3">
+                {rangePaneEntries.map((entry, index) => (
+                  <RangePanel
+                    emptyText={
+                      entry.kind === "current"
+                        ? "No range file found for this action."
+                        : undefined
+                    }
+                    key={`${entry.kind}-${entry.title}-${index}`}
+                    range={entry.range}
+                    rangeSource={entry.rangeSource}
+                    reachRange={entry.reachRange}
+                    subtitle={entry.subtitle}
+                    title={entry.title}
+                  />
+                ))}
+              </div>
+            ) : (
+              <section className="rounded border border-dashed border-gray-300 bg-white px-4 py-10 text-center text-sm font-semibold text-gray-500">
+                Action ranges appear here as you drill the preflop line.
+              </section>
+            )}
           </div>
-          {decision ? (
-            <div className="mt-4 flex flex-col gap-3 text-sm text-gray-600">
-              {decision.notes.map((note) => (
-                <div
-                  className="rounded border border-gray-200 bg-gray-50 p-3"
-                  key={note}
-                >
-                  {note}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-4 text-sm text-gray-500">
-              Range derivation appears after a decision.
-            </div>
-          )}
-        </aside>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }
