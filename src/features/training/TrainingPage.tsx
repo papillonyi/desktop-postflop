@@ -11,6 +11,7 @@ import { useAppDispatch } from "../../app/hooks";
 import {
   setSolverFinished,
   setTrainingResult,
+  setTrainingResultHistory,
 } from "../../app/slices/appSlice";
 import { setConfig } from "../../app/slices/configSlice";
 import * as invokes from "../../invokes";
@@ -32,6 +33,8 @@ import {
 import { PreflopTrainingPanel } from "./PreflopTrainingPanel";
 import {
   buildTrainingHistoryExport,
+  replaceDecisionAtHistoryIndex,
+  selectCurrentTrainingHistory,
   trainingHistoryFilename,
   type TrainingHistoryDecision,
 } from "./trainingHistoryExport";
@@ -202,11 +205,13 @@ function comboCardList(cards: [number, number]) {
 }
 
 function SessionBoardInfoCard({
+  board,
   heroHand,
   session,
   terminal,
   villainHand,
 }: {
+  board: number[];
   heroHand: number[];
   session: TrainingSession;
   terminal: boolean;
@@ -233,7 +238,7 @@ function SessionBoardInfoCard({
         <div className="mb-1 text-xs font-semibold uppercase text-gray-500">
           Board
         </div>
-        {cardList(session.board)}
+        {cardList(board)}
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-5">
         <div>
@@ -583,6 +588,7 @@ export function TrainingPage() {
     : null;
   const heroHand = session?.heroHand.cards ?? [];
   const villainHand = session?.villainHand.cards ?? [];
+  const boardCards = navigatorUpdate?.currentBoard ?? session?.board ?? [];
   const livePot = navigatorUpdate?.selectedSpot?.pot ?? session?.startingPot;
   const currentSpot =
     navigatorUpdate?.selectedSpot?.type === "player"
@@ -617,10 +623,11 @@ export function TrainingPage() {
   };
 
   const currentHistory = () =>
-    initialHistory ??
-    navigatorRef.current?.getSnapshot()?.currentHistory ??
-    navigatorUpdate?.currentHistory ??
-    [];
+    selectCurrentTrainingHistory({
+      initialHistory,
+      navigatorHistory: navigatorRef.current?.getSnapshot()?.currentHistory,
+      updateHistory: navigatorUpdate?.currentHistory,
+    });
 
   const savePostflopSnapshot = (
     overrides: Partial<PostflopTrainingSnapshot> = {}
@@ -648,6 +655,7 @@ export function TrainingPage() {
   ) => {
     await invokes.gameApplyHistory([]);
     applyResultsState(nextSession);
+    dispatch(setTrainingResultHistory([]));
     setSession(nextSession);
     setCards(nextCards);
     setNavigatorUpdate(null);
@@ -694,7 +702,8 @@ export function TrainingPage() {
       savePostflopSnapshot({ currentHistory: history });
       await invokes.gameApplyHistory(history);
       applyResultsState(session);
-      navigate("/results");
+      dispatch(setTrainingResultHistory(history));
+      navigate("/results", { state: { initialHistory: [...history] } });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -814,6 +823,7 @@ export function TrainingPage() {
         actions: details,
         board: navigatorUpdate.currentBoard,
         handCards,
+        historyIndex: spot.index - 1,
         order: nextDecisionOrder(),
         position,
         spot: session.spot,
@@ -847,24 +857,77 @@ export function TrainingPage() {
     }
   };
 
+  const restoreHistoricalAction = async (
+    spot: SpotPlayer,
+    actionIndex: number
+  ) => {
+    if (actionInFlightRef.current || !session || spot.selectedIndex === -1) {
+      return;
+    }
+    actionInFlightRef.current = true;
+    try {
+      const historyIndex = spot.index - 1;
+      const actor = spot.player === session.heroPlayer ? "hero" : "villain";
+      const nextHeroDecisions =
+        actor === "hero"
+          ? replaceDecisionAtHistoryIndex(
+              decisionLog,
+              historyIndex,
+              actionIndex
+            )
+          : decisionLog.filter(
+              (decision) => decision.historyIndex < historyIndex
+            );
+      const nextVillainDecisions =
+        actor === "villain"
+          ? replaceDecisionAtHistoryIndex(
+              villainDecisionLog,
+              historyIndex,
+              actionIndex
+            ).map((decision) =>
+              decision.historyIndex === historyIndex &&
+              spot.selectedIndex !== actionIndex
+                ? { ...decision, villainActionRange: undefined }
+                : decision
+            )
+          : villainDecisionLog.filter(
+              (decision) => decision.historyIndex < historyIndex
+            );
+      const nextOrder = Math.max(
+        0,
+        ...nextHeroDecisions.map((decision) => decision.order + 1),
+        ...nextVillainDecisions.map((decision) => decision.order + 1)
+      );
+
+      decisionOrderRef.current = nextOrder;
+      setDecisionLog(nextHeroDecisions);
+      setVillainDecisionLog(nextVillainDecisions);
+      setLastReview(nextHeroDecisions.at(-1) ?? null);
+      setShowVillainDecisionLog(false);
+      await navigatorRef.current?.playAt(spot.index, actionIndex);
+    } finally {
+      actionInFlightRef.current = false;
+    }
+  };
+
   const handleNavigatorAction = (spot: SpotPlayer, actionIndex: number) => {
-    if (
-      !session ||
-      !currentSpot ||
-      !isHeroTurn ||
-      spot.index !== currentSpot.index ||
-      actionIndex < 0 ||
-      actionIndex >= currentSpot.actions.length
-    ) {
+    if (!session || actionIndex < 0 || actionIndex >= spot.actions.length) {
       return false;
     }
-    void chooseHeroAction(currentSpot, actionIndex);
+    if (currentSpot && isHeroTurn && spot.index === currentSpot.index) {
+      void chooseHeroAction(currentSpot, actionIndex);
+      return false;
+    }
+    if (spot.selectedIndex !== -1) {
+      void restoreHistoricalAction(spot, actionIndex);
+    }
     return false;
   };
 
   const handleNavigatorUpdate = (update: ResultNavigationUpdate) => {
     setNavigatorUpdate(update);
     setInitialHistory(null);
+    dispatch(setTrainingResultHistory(update.currentHistory));
   };
 
   useEffect(() => {
@@ -1158,6 +1221,7 @@ export function TrainingPage() {
                 <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-stretch">
                   {renderActionPanel()}
                   <SessionBoardInfoCard
+                    board={boardCards}
                     heroHand={heroHand}
                     session={session}
                     terminal={terminal}
@@ -1200,80 +1264,84 @@ export function TrainingPage() {
                     No decisions yet.
                   </div>
                 ) : (
-                  <div className="mt-4 grid grid-cols-1 gap-3 2xl:grid-cols-2">
+                  <div className="mt-4 flex flex-col gap-2">
                     {displayDecisionLog.map(
                       ({ decision, actorDecisionNumber }) => {
                         const hideVillainPrivateDetails =
                           decision.actor === "villain" && !terminal;
                         return (
                           <article
-                            className="rounded border border-gray-200 bg-white p-3 shadow-sm"
+                            className="rounded border border-gray-200 bg-white px-3 py-2 shadow-sm"
                             key={`${decision.actor}-${decision.order}`}
                           >
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <div className="text-xs font-semibold uppercase text-gray-500">
-                                  {decision.actor === "hero"
-                                    ? "Hero"
-                                    : "Villain"}{" "}
-                                  Decision {actorDecisionNumber}
-                                </div>
-                                <div className="mt-1 text-sm font-semibold">
-                                  {decision.position}{" "}
-                                  {hideVillainPrivateDetails
-                                    ? "Hidden hand"
-                                    : formatHand(decision.handCards)}
-                                </div>
-                              </div>
-                              <div
-                                className={[
-                                  "rounded px-2 py-1 text-xs font-semibold",
-                                  decision.actor === "villain"
-                                    ? "bg-red-50 text-red-700"
-                                    : "bg-blue-50 text-blue-700",
-                                ].join(" ")}
-                              >
-                                {decision.actionLabel}
-                              </div>
-                            </div>
-                            <div className="mt-2 text-xs text-gray-500">
-                              {decision.spot}
-                            </div>
-                            <div className="mt-1 text-xs text-gray-500">
-                              Board {formatBoard(decision.board)}
-                            </div>
-                            {hideVillainPrivateDetails ? (
-                              <div className="mt-3 border-t border-gray-100 pt-2 text-xs font-semibold text-gray-500">
-                                Villain hand-specific frequencies hidden until
-                                terminal.
-                              </div>
-                            ) : (
-                              <div className="mt-3 divide-y divide-gray-100 border-t border-gray-100 pt-2 text-xs">
-                                {decision.actions.map((action) => (
-                                  <div
+                            <div className="flex flex-col gap-2 overflow-hidden text-xs">
+                              <div className="overflow-x-auto">
+                                <div className="flex min-w-max items-center gap-3">
+                                  <span className="font-semibold uppercase text-gray-500">
+                                    {decision.actor === "hero"
+                                      ? "Hero"
+                                      : "Villain"}{" "}
+                                    Decision {actorDecisionNumber}
+                                  </span>
+                                  <span className="text-sm font-semibold text-gray-900">
+                                    {decision.position}{" "}
+                                    {hideVillainPrivateDetails
+                                      ? "Hidden hand"
+                                      : formatHand(decision.handCards)}
+                                  </span>
+                                  <span
                                     className={[
-                                      "grid grid-cols-[minmax(0,1fr)_3.75rem_3.75rem] items-center gap-2 py-1.5",
-                                      action.isChosen
-                                        ? decision.actor === "villain"
-                                          ? "font-semibold text-red-700"
-                                          : "font-semibold text-blue-700"
-                                        : "text-gray-600",
+                                      "rounded px-2 py-1 font-semibold",
+                                      decision.actor === "villain"
+                                        ? "bg-red-50 text-red-700"
+                                        : "bg-blue-50 text-blue-700",
                                     ].join(" ")}
-                                    key={action.actionIndex}
                                   >
-                                    <span className="truncate">
-                                      {actionLabel(action)}
-                                    </span>
-                                    <span className="text-right">
-                                      {formatProbability(action.probability)}
-                                    </span>
-                                    <span className="text-right">
-                                      {formatEv(action.ev)}
-                                    </span>
-                                  </div>
-                                ))}
+                                    {decision.actionLabel}
+                                  </span>
+                                  <span className="text-gray-500">
+                                    {decision.spot}
+                                  </span>
+                                  <span className="text-gray-500">
+                                    Board {formatBoard(decision.board)}
+                                  </span>
+                                </div>
                               </div>
-                            )}
+                              <div className="overflow-x-auto border-t border-gray-100 pt-2">
+                                {hideVillainPrivateDetails ? (
+                                  <div className="min-w-max font-semibold text-gray-500">
+                                    Villain hand-specific frequencies hidden
+                                    until terminal.
+                                  </div>
+                                ) : (
+                                  <div className="flex min-w-max items-center gap-3">
+                                    {decision.actions.map((action) => (
+                                      <span
+                                        className={[
+                                          "border-l border-gray-200 pl-3 first:border-l-0 first:pl-0",
+                                          action.isChosen
+                                            ? decision.actor === "villain"
+                                              ? "font-semibold text-red-700"
+                                              : "font-semibold text-blue-700"
+                                            : "text-gray-600",
+                                        ].join(" ")}
+                                        key={action.actionIndex}
+                                      >
+                                        {actionLabel(action)}{" "}
+                                        <span className="text-gray-500">
+                                          {formatProbability(
+                                            action.probability
+                                          )}
+                                        </span>{" "}
+                                        <span className="text-gray-500">
+                                          EV {formatEv(action.ev)}
+                                        </span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </article>
                         );
                       }

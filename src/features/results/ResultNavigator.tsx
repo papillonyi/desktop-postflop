@@ -43,6 +43,7 @@ export type ResultNavigatorSnapshot = ResultNavigationUpdate & {
 export type ResultNavigatorHandle = {
   dealSelected: (card: number) => Promise<void>;
   getSnapshot: () => ResultNavigatorSnapshot | null;
+  playAt: (spotIndex: number, actionIndex: number) => Promise<void>;
   playSelected: (actionIndex: number) => Promise<void>;
 };
 
@@ -597,6 +598,12 @@ export const ResultNavigator = forwardRef<
         spots: spotsRef.current,
         totalBetAmount: totalBetAmountRef.current,
       };
+    },
+    playAt: async (spotIndex: number, actionIndex: number) => {
+      const spot = spotsRef.current[spotIndex];
+      if (spot?.type !== "player") return;
+      if (actionIndex < 0 || actionIndex >= spot.actions.length) return;
+      await play(spotIndex, actionIndex);
     },
     playSelected: async (actionIndex: number) => {
       const selectedSpotIndex = selectedSpotIndexRef.current;

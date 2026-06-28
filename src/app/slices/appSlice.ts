@@ -10,6 +10,7 @@ type AppState = {
   isSolverError: boolean;
   isFinalizing: boolean;
   isTrainingResult: boolean;
+  trainingResultHistory: number[] | null;
 };
 
 const initialState: AppState = {
@@ -22,6 +23,7 @@ const initialState: AppState = {
   isSolverError: false,
   isFinalizing: false,
   isTrainingResult: false,
+  trainingResultHistory: null,
 };
 
 const appSlice = createSlice({
@@ -54,6 +56,12 @@ const appSlice = createSlice({
     },
     setTrainingResult(state, action: PayloadAction<boolean>) {
       state.isTrainingResult = action.payload;
+      if (!action.payload) {
+        state.trainingResultHistory = null;
+      }
+    },
+    setTrainingResultHistory(state, action: PayloadAction<number[] | null>) {
+      state.trainingResultHistory = action.payload;
     },
   },
 });
@@ -68,6 +76,7 @@ export const {
   setSolverError,
   setFinalizing,
   setTrainingResult,
+  setTrainingResultHistory,
 } = appSlice.actions;
 
 export default appSlice.reducer;

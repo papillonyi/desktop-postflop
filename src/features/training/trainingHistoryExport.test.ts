@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildTrainingHistoryExport,
+  replaceDecisionAtHistoryIndex,
+  selectResultInitialHistory,
+  selectCurrentTrainingHistory,
   trainingHistoryFilename,
   type TrainingHistoryDecision,
 } from "./trainingHistoryExport.js";
@@ -58,6 +61,7 @@ const heroDecision: TrainingHistoryDecision = {
   ],
   board: [0, 48, 45],
   handCards: [7, 11],
+  historyIndex: 0,
   order: 1,
   position: "BTN",
   spot: "BTN open vs BB call",
@@ -68,9 +72,67 @@ const villainDecision: TrainingHistoryDecision = {
   actionLabel: "Call",
   actor: "villain",
   handCards: [32, 36],
+  historyIndex: 1,
   order: 0,
   position: "BB",
 };
+
+test("replaceDecisionAtHistoryIndex changes one action and drops later decisions", () => {
+  const result = replaceDecisionAtHistoryIndex(
+    [heroDecision, villainDecision],
+    0,
+    0
+  );
+
+  assert.equal(result.length, 1);
+  assert.equal(result[0].actionLabel, "Check");
+  assert.equal(result[0].actions[0].isChosen, true);
+  assert.equal(result[0].actions[1].isChosen, false);
+});
+
+test("selectCurrentTrainingHistory prefers live navigator history", () => {
+  assert.deepEqual(
+    selectCurrentTrainingHistory({
+      initialHistory: [],
+      navigatorHistory: [1, 0, 31],
+      updateHistory: [1],
+    }),
+    [1, 0, 31]
+  );
+});
+
+test("selectCurrentTrainingHistory skips empty live history when update has actions", () => {
+  assert.deepEqual(
+    selectCurrentTrainingHistory({
+      initialHistory: [],
+      navigatorHistory: [],
+      updateHistory: [1, 0, 31],
+    }),
+    [1, 0, 31]
+  );
+});
+
+test("selectResultInitialHistory falls back to stored training history", () => {
+  assert.deepEqual(
+    selectResultInitialHistory({
+      isTrainingResult: true,
+      routeHistory: undefined,
+      storedHistory: [1, 0, 31],
+    }),
+    [1, 0, 31]
+  );
+});
+
+test("selectResultInitialHistory skips empty route history when stored history has actions", () => {
+  assert.deepEqual(
+    selectResultInitialHistory({
+      isTrainingResult: true,
+      routeHistory: [],
+      storedHistory: [1, 0, 31],
+    }),
+    [1, 0, 31]
+  );
+});
 
 test("buildTrainingHistoryExport records session context and sorted GTO decisions", () => {
   const payload = buildTrainingHistoryExport({

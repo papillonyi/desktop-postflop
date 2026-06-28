@@ -1,18 +1,4 @@
-const ranks = [
-  "2",
-  "3",
-  "4",
-  "5",
-  "6",
-  "7",
-  "8",
-  "9",
-  "T",
-  "J",
-  "Q",
-  "K",
-  "A",
-];
+const ranks = ["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"];
 const suitLetters = ["c", "d", "h", "s"];
 
 export type TrainingHistoryAction = {
@@ -30,6 +16,7 @@ export type TrainingHistoryDecision = {
   actions: TrainingHistoryAction[];
   board: number[];
   handCards: number[];
+  historyIndex: number;
   order: number;
   position: string;
   spot: string;
@@ -72,6 +59,18 @@ export type TrainingHistoryExportInput = {
   livePot: number | null;
   session: TrainingHistorySession;
   villainDecisions: TrainingHistoryDecision[];
+};
+
+export type CurrentTrainingHistoryInput = {
+  initialHistory?: number[] | null;
+  navigatorHistory?: number[] | null;
+  updateHistory?: number[] | null;
+};
+
+export type ResultInitialHistoryInput = {
+  isTrainingResult: boolean;
+  routeHistory?: unknown;
+  storedHistory?: number[] | null;
 };
 
 export type TrainingHistoryExportPayload = {
@@ -140,6 +139,7 @@ export type TrainingHistoryExportPayload = {
       probability: number;
     } | null;
     handCards: string[];
+    historyIndex: number;
     order: number;
     position: string;
     spot: string;
@@ -192,10 +192,66 @@ function normalizeDecision(decision: TrainingHistoryDecision) {
         }
       : null,
     handCards: cardStrings(decision.handCards),
+    historyIndex: decision.historyIndex,
     order: decision.order,
     position: decision.position,
     spot: decision.spot,
   };
+}
+
+export function replaceDecisionAtHistoryIndex(
+  decisions: TrainingHistoryDecision[],
+  historyIndex: number,
+  actionIndex: number
+) {
+  const decision = decisions.find((item) => item.historyIndex === historyIndex);
+  const previous = decisions.filter((item) => item.historyIndex < historyIndex);
+  if (!decision) return previous;
+
+  const actions = decision.actions.map((action) => ({
+    ...action,
+    isChosen: action.actionIndex === actionIndex,
+  }));
+  const chosen = actions.find((action) => action.isChosen) ?? actions[0];
+
+  return [
+    ...previous,
+    {
+      ...decision,
+      actionLabel: chosen ? actionLabel(chosen) : decision.actionLabel,
+      actions,
+    },
+  ];
+}
+
+export function selectCurrentTrainingHistory({
+  initialHistory,
+  navigatorHistory,
+  updateHistory,
+}: CurrentTrainingHistoryInput) {
+  return (
+    [navigatorHistory, updateHistory, initialHistory].find(
+      (history) => history && history.length > 0
+    ) ??
+    navigatorHistory ??
+    updateHistory ??
+    initialHistory ??
+    []
+  );
+}
+
+function isHistory(value: unknown): value is number[] {
+  return Array.isArray(value) && value.every(Number.isInteger);
+}
+
+export function selectResultInitialHistory({
+  isTrainingResult,
+  routeHistory,
+  storedHistory,
+}: ResultInitialHistoryInput) {
+  if (!isTrainingResult) return null;
+  if (isHistory(routeHistory) && routeHistory.length > 0) return routeHistory;
+  return storedHistory ?? null;
 }
 
 export function buildTrainingHistoryExport({

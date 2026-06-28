@@ -11,6 +11,7 @@ import {
 } from "chart.js";
 import { useEffect, useMemo, useState } from "react";
 import { Bar, Line } from "react-chartjs-2";
+import { useLocation } from "react-router";
 import { useAppSelector } from "../../app/hooks";
 import type {
   ChanceReports,
@@ -34,6 +35,7 @@ import {
 } from "../../result-types";
 import { BoardCard } from "../../shared/components/BoardCard";
 import * as invokes from "../../invokes";
+import { selectResultInitialHistory } from "../training/trainingHistoryExport";
 import { ResultNavigator } from "./ResultNavigator";
 import {
   average,
@@ -1331,12 +1333,21 @@ function ResultChance({
 }
 
 export function ResultViewer() {
+  const location = useLocation();
   const isSolverFinished = useAppSelector(
     (state) => state.app.isSolverFinished
   );
   const isTrainingResult = useAppSelector(
     (state) => state.app.isTrainingResult
   );
+  const trainingResultHistory = useAppSelector(
+    (state) => state.app.trainingResultHistory
+  );
+  const initialHistory = selectResultInitialHistory({
+    isTrainingResult,
+    routeHistory: location.state?.initialHistory,
+    storedHistory: trainingResultHistory,
+  });
   const [loaded, setLoaded] = useState<LoadedResults | null>(null);
   const [displayMode, setDisplayMode] = useState<DisplayMode>("basics");
   const [displayOptions, setDisplayOptions] =
@@ -1452,6 +1463,7 @@ export function ResultViewer() {
       <ResultNavigator
         cards={loaded.cards}
         dealRequest={dealRequest}
+        initialHistory={initialHistory}
         onDealHandled={() => setDealRequest(null)}
         onUpdate={onNavigatorUpdate}
         showPotWithoutBets={isTrainingResult}
